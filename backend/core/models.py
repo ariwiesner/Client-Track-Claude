@@ -172,3 +172,40 @@ class Receipt(models.Model):
 
     def __str__(self):
         return f"{self.client} — {self.receipt_date} — ₪{self.amount}"
+
+
+class ReceiptChatUpload(models.Model):
+    """One turn in a worker's receipt-chat: the uploaded photo plus what the
+    LLM extracted from it. Kept (unlike Receipt) even before/without
+    approval, so the chat has something to show when the worker navigates
+    back — see ReceiptChatViewSet's lazy 7-day cleanup for retention.
+    """
+    STATUS_PENDING = 'pending'
+    STATUS_APPROVED = 'approved'
+    STATUS_DISCARDED = 'discarded'
+    STATUS_ERROR = 'error'
+    STATUS_CHOICES = [
+        (STATUS_PENDING, 'ממתין'),
+        (STATUS_APPROVED, 'אושר'),
+        (STATUS_DISCARDED, 'בוטל'),
+        (STATUS_ERROR, 'שגיאה'),
+    ]
+
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='receipt_chat_uploads'
+    )
+    image = models.ImageField(upload_to='receipt_chat/%Y/%m/')
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default=STATUS_PENDING)
+    extraction = models.JSONField(default=dict, blank=True)
+    error_message = models.CharField(max_length=500, blank=True)
+    receipt = models.ForeignKey(
+        Receipt, on_delete=models.SET_NULL, null=True, blank=True, related_name='chat_uploads'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['created_at']
+        verbose_name_plural = 'Receipt chat uploads'
+
+    def __str__(self):
+        return f"{self.created_by} — {self.status} — {self.created_at:%Y-%m-%d %H:%M}"

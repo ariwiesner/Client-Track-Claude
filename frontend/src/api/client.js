@@ -87,21 +87,17 @@ export const api = {
   getMySummary: (year, month) => request(`/me/summary/?year=${year}&month=${month}`),
   changePassword: (data) => request('/auth/change-password/', { method: 'POST', body: data }),
 
-  extractReceipt: (imageFile) => {
-    const fd = new FormData();
-    fd.append('image', imageFile);
-    return requestForm('/receipts/extract/', fd);
-  },
-  createReceipt: (fields, imageFile) => {
-    const fd = new FormData();
-    fd.append('image', imageFile);
-    fd.append('client', fields.client);
-    fd.append('amount', fields.amount);
-    fd.append('receipt_number', fields.receipt_number || '');
-    fd.append('category', fields.category);
-    fd.append('receipt_date', fields.receipt_date);
-    return requestForm('/receipts/', fd);
-  },
   listReceipts: (clientId, year, month) =>
     request(`/receipts/?client=${clientId}&year=${year}&month=${month}`),
+
+  listReceiptChat: () => request('/receipt-chat/'),
+  uploadReceiptChat: (imageFile) => {
+    const fd = new FormData();
+    fd.append('image', imageFile);
+    return requestForm('/receipt-chat/', fd);
+  },
+  approveReceiptChat: (id, fields) =>
+    request(`/receipt-chat/${id}/approve/`, { method: 'POST', body: fields }),
+  discardReceiptChat: (id) => request(`/receipt-chat/${id}/discard/`, { method: 'POST' }),
+  retryReceiptChat: (id) => request(`/receipt-chat/${id}/retry/`, { method: 'POST' }),
 };

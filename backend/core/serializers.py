@@ -1,7 +1,7 @@
 from django.contrib.auth.models import User
 from rest_framework import serializers
 
-from core.models import Client, MonthlyBilling, Receipt, TimeEntry, TrackedSystem
+from core.models import Client, MonthlyBilling, Receipt, ReceiptChatUpload, TimeEntry, TrackedSystem
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -107,3 +107,12 @@ class ReceiptSerializer(serializers.ModelSerializer):
         if not obj.created_by:
             return None
         return obj.created_by.first_name or obj.created_by.username
+
+
+class ReceiptChatUploadSerializer(serializers.ModelSerializer):
+    receipt = ReceiptSerializer(read_only=True)
+
+    class Meta:
+        model = ReceiptChatUpload
+        fields = ['id', 'image', 'status', 'extraction', 'error_message', 'receipt', 'created_at']
+        read_only_fields = fields

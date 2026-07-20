@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from core.models import Client, MonthlyBilling, Receipt, TimeEntry, TrackedSystem
+from core.models import Client, MonthlyBilling, Receipt, ReceiptChatUpload, TimeEntry, TrackedSystem
 
 
 @admin.register(Client)
@@ -32,3 +32,9 @@ class ReceiptAdmin(admin.ModelAdmin):
     list_display = ['client', 'receipt_date', 'category', 'amount', 'receipt_number', 'created_by']
     list_filter = ['category', 'client']
     date_hierarchy = 'receipt_date'
+
+
+@admin.register(ReceiptChatUpload)
+class ReceiptChatUploadAdmin(admin.ModelAdmin):
+    list_display = ['created_by', 'status', 'receipt', 'created_at']
+    list_filter = ['status', 'created_by']

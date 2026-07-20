@@ -18,197 +18,146 @@ function UploadIcon() {
   );
 }
 
+function buildForm(extraction) {
+  return {
+    client: extraction?.client_id ? String(extraction.client_id) : '',
+    amount: extraction?.amount || '',
+    receipt_number: extraction?.receipt_number || '',
+    receipt_date: extraction?.receipt_date || new Date().toISOString().slice(0, 10),
+    category: extraction?.category || 'other',
+  };
+}
+
+function withForm(row) {
+  return { ...row, form: row.status === 'pending' ? buildForm(row.extraction) : null };
+}
+
 export function ReceiptChatPage() {
   const [clients, setClients] = useState([]);
-  const [timeline, setTimeline] = useState([]);
-  const [pending, setPending] = useState(null);
-  const [status, setStatus] = useState('idle'); // idle | extracting | approving
-  const fileInputRef = useRef(null);
+  const [entries, setEntries] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const [busyId, setBusyId] = useState(null);
+  const [error, setError] = useState('');
   const scrollRef = useRef(null);
 
   useEffect(() => {
     api.listClients().then(setClients);
+    api
+      .listReceiptChat()
+      .then((rows) => setEntries(rows.map(withForm)))
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false));
   }, []);
 
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [timeline, pending]);
+  }, [entries, uploading]);
 
-  function addLine(entry) {
-    setTimeline((t) => [...t, { id: Date.now() + Math.random(), ...entry }]);
+  function replaceEntry(id, updatedRow) {
+    setEntries((prev) => prev.map((e) => (e.id === id ? withForm(updatedRow) : e)));
   }
 
-  async function runExtraction(file) {
-    setStatus('extracting');
-    try {
-      const result = await api.extractReceipt(file);
-      setPending({
-        imageFile: file,
-        previewUrl: URL.createObjectURL(file),
-        matchScore: result.client_match_score,
-        clientNameGuess: result.client_name_guess,
-        form: {
-          client: result.client_id ? String(result.client_id) : '',
-          amount: result.amount || '',
-          receipt_number: result.receipt_number || '',
-          receipt_date: result.receipt_date || new Date().toISOString().slice(0, 10),
-          category: result.category || 'other',
-        },
-      });
-      setStatus('idle');
-    } catch (err) {
-      addLine({ kind: 'error', message: err.message, file });
-      setStatus('idle');
-    }
+  function updateField(id, field, value) {
+    setEntries((prev) =>
+      prev.map((e) => (e.id === id ? { ...e, form: { ...e.form, [field]: value } } : e))
+    );
   }
 
-  function handleFileSelect(e) {
+  async function handleFileSelect(e) {
     const file = e.target.files?.[0];
     e.target.value = '';
     if (!file) return;
-    addLine({ kind: 'upload', previewUrl: URL.createObjectURL(file) });
-    runExtraction(file);
-  }
-
-  function updateField(field, value) {
-    setPending((p) => ({ ...p, form: { ...p.form, [field]: value } }));
-  }
-
-  async function handleApprove() {
-    if (!pending) return;
-    setStatus('approving');
+    setError('');
+    setUploading(true);
     try {
-      const receipt = await api.createReceipt(pending.form, pending.imageFile);
-      const client = clients.find((c) => String(c.id) === String(receipt.client));
-      addLine({ kind: 'success', clientName: client?.name || receipt.client_name });
-      setPending(null);
+      const row = await api.uploadReceiptChat(file);
+      setEntries((prev) => [...prev, withForm(row)]);
     } catch (err) {
-      addLine({ kind: 'error', message: err.message });
+      setError(err.message);
     } finally {
-      setStatus('idle');
+      setUploading(false);
     }
   }
 
-  function handleDiscard() {
-    addLine({ kind: 'discarded' });
-    setPending(null);
+  async function handleApprove(entry) {
+    setBusyId(entry.id);
+    setError('');
+    try {
+      const updated = await api.approveReceiptChat(entry.id, entry.form);
+      replaceEntry(entry.id, updated);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusyId(null);
+    }
   }
 
-  function handleRetry(file) {
-    runExtraction(file);
+  async function handleDiscard(entry) {
+    setBusyId(entry.id);
+    setError('');
+    try {
+      const updated = await api.discardReceiptChat(entry.id);
+      replaceEntry(entry.id, updated);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusyId(null);
+    }
   }
 
-  const canApprove =
-    pending &&
-    pending.form.client &&
-    pending.form.amount &&
-    pending.form.category &&
-    pending.form.receipt_date;
+  async function handleRetry(entry) {
+    setBusyId(entry.id);
+    setError('');
+    try {
+      const updated = await api.retryReceiptChat(entry.id);
+      replaceEntry(entry.id, updated);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusyId(null);
+    }
+  }
 
   return (
     <div className="chat-page">
       <p className="hint chat-intro">
         העלו תמונה של קבלה — הבינה המלאכותית תזהה את הלקוח, הסכום והקטגוריה, ותציג לכם לאישור.
+        היסטוריית הצ'אט נשמרת למשך 7 ימים.
       </p>
 
+      {error && <p className="error">{error}</p>}
+
       <div className="chat-scroll">
-        {timeline.map((line) => (
-          <ChatLine key={line.id} line={line} onRetry={handleRetry} />
+        {loading && <p className="hint">טוען היסטוריה…</p>}
+
+        {entries.map((entry) => (
+          <ChatEntry
+            key={entry.id}
+            entry={entry}
+            clients={clients}
+            busy={busyId === entry.id}
+            onFieldChange={(field, value) => updateField(entry.id, field, value)}
+            onApprove={() => handleApprove(entry)}
+            onDiscard={() => handleDiscard(entry)}
+            onRetry={() => handleRetry(entry)}
+          />
         ))}
 
-        {status === 'extracting' && (
-          <div className="chat-bubble assistant loading">קורא את הקבלה…</div>
-        )}
-
-        {pending && (
-          <div className="chat-bubble assistant">
-            <div className="card chat-review-card">
-              <img src={pending.previewUrl} alt="תצוגה מקדימה של הקבלה" className="chat-thumb" />
-
-              <label>
-                לקוח
-                <select value={pending.form.client} onChange={(e) => updateField('client', e.target.value)}>
-                  <option value="">— בחירת לקוח —</option>
-                  {clients.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              {pending.form.client && pending.matchScore != null && (
-                <p className="hint">זוהה אוטומטית ({Math.round(pending.matchScore)}%)</p>
-              )}
-              {!pending.form.client && pending.clientNameGuess && (
-                <p className="error">
-                  לא זוהה לקוח בוודאות (נראה כמו "{pending.clientNameGuess}") — יש לבחור ידנית.
-                </p>
-              )}
-              {!pending.form.client && !pending.clientNameGuess && (
-                <p className="error">לא זוהה לקוח — יש לבחור ידנית.</p>
-              )}
-
-              <label>
-                סכום (₪)
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={pending.form.amount}
-                  onChange={(e) => updateField('amount', e.target.value)}
-                />
-              </label>
-              <label>
-                מספר קבלה
-                <input
-                  type="text"
-                  value={pending.form.receipt_number}
-                  onChange={(e) => updateField('receipt_number', e.target.value)}
-                />
-              </label>
-              <label>
-                תאריך
-                <input
-                  type="date"
-                  value={pending.form.receipt_date}
-                  onChange={(e) => updateField('receipt_date', e.target.value)}
-                />
-              </label>
-              <label>
-                קטגוריה
-                <select value={pending.form.category} onChange={(e) => updateField('category', e.target.value)}>
-                  {CATEGORY_OPTIONS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <div className="chat-review-actions">
-                <button className="secondary" onClick={handleDiscard} disabled={status === 'approving'}>
-                  ביטול
-                </button>
-                <button onClick={handleApprove} disabled={!canApprove || status === 'approving'}>
-                  {status === 'approving' ? 'שומר…' : 'אישור והוספה'}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        {uploading && <div className="chat-bubble assistant loading">קורא את הקבלה…</div>}
 
         <div ref={scrollRef} />
       </div>
 
       <div className="chat-upload-zone">
         <input
-          ref={fileInputRef}
           type="file"
           accept="image/*"
           capture="environment"
           onChange={handleFileSelect}
           className="chat-file-input"
           id="receipt-upload-input"
+          disabled={uploading}
         />
         <label htmlFor="receipt-upload-input" className="button chat-upload-button">
           <UploadIcon />
@@ -219,39 +168,125 @@ export function ReceiptChatPage() {
   );
 }
 
-function ChatLine({ line, onRetry }) {
-  if (line.kind === 'upload') {
-    return (
-      <div className="chat-bubble user">
-        <img src={line.previewUrl} alt="קבלה שהועלתה" className="chat-thumb" />
-      </div>
-    );
-  }
-  if (line.kind === 'success') {
-    return (
-      <div className="chat-bubble assistant">
-        <p className="success">✓ הקבלה נשמרה עבור {line.clientName}</p>
-      </div>
-    );
-  }
-  if (line.kind === 'discarded') {
-    return (
-      <div className="chat-bubble assistant">
-        <p className="hint">בוטל.</p>
-      </div>
-    );
-  }
-  if (line.kind === 'error') {
+function ChatEntry({ entry, clients, busy, onFieldChange, onApprove, onDiscard, onRetry }) {
+  if (entry.status === 'error') {
     return (
       <div className="chat-bubble assistant error">
-        <p className="error">{line.message}</p>
-        {line.file && (
-          <button className="secondary" onClick={() => onRetry(line.file)}>
-            נסה שוב
+        <div className="card chat-review-card">
+          <img src={entry.image} alt="קבלה" className="chat-thumb" />
+          <p className="error">{entry.error_message}</p>
+          <button className="secondary" onClick={onRetry} disabled={busy}>
+            {busy ? 'מנסה…' : 'נסה שוב'}
           </button>
-        )}
+        </div>
       </div>
     );
   }
-  return null;
+
+  if (entry.status === 'approved') {
+    const { receipt } = entry;
+    return (
+      <div className="chat-bubble assistant">
+        <div className="card chat-review-card">
+          <img src={entry.image} alt="קבלה" className="chat-thumb" />
+          <p className="success">
+            ✓ נשמר עבור {receipt.client_name} — {receipt.category_display} — ₪
+            {Number(receipt.amount).toFixed(2)}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (entry.status === 'discarded') {
+    return (
+      <div className="chat-bubble assistant">
+        <div className="card chat-review-card">
+          <img src={entry.image} alt="קבלה" className="chat-thumb" />
+          <p className="hint">בוטל.</p>
+        </div>
+      </div>
+    );
+  }
+
+  // pending — editable review card
+  const { form } = entry;
+  const canApprove = form.client && form.amount && form.category && form.receipt_date;
+
+  return (
+    <div className="chat-bubble assistant">
+      <div className="card chat-review-card">
+        <img src={entry.image} alt="קבלה" className="chat-thumb" />
+
+        <label>
+          לקוח
+          <select value={form.client} onChange={(e) => onFieldChange('client', e.target.value)}>
+            <option value="">— בחירת לקוח —</option>
+            {clients.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        {form.client && entry.extraction?.client_match_score != null && (
+          <p className="hint">זוהה אוטומטית ({Math.round(entry.extraction.client_match_score)}%)</p>
+        )}
+        {!form.client && entry.extraction?.client_name_guess && (
+          <p className="error">
+            לא זוהה לקוח בוודאות (נראה כמו "{entry.extraction.client_name_guess}") — יש לבחור ידנית.
+          </p>
+        )}
+        {!form.client && !entry.extraction?.client_name_guess && (
+          <p className="error">לא זוהה לקוח — יש לבחור ידנית.</p>
+        )}
+
+        <label>
+          סכום (₪)
+          <input
+            type="number"
+            step="0.01"
+            min="0"
+            value={form.amount}
+            onChange={(e) => onFieldChange('amount', e.target.value)}
+          />
+        </label>
+        <label>
+          מספר קבלה
+          <input
+            type="text"
+            value={form.receipt_number}
+            onChange={(e) => onFieldChange('receipt_number', e.target.value)}
+          />
+        </label>
+        <label>
+          תאריך
+          <input
+            type="date"
+            value={form.receipt_date}
+            onChange={(e) => onFieldChange('receipt_date', e.target.value)}
+          />
+        </label>
+        <label>
+          קטגוריה
+          <select value={form.category} onChange={(e) => onFieldChange('category', e.target.value)}>
+            {CATEGORY_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <div className="chat-review-actions">
+          <button className="secondary" onClick={onDiscard} disabled={busy}>
+            ביטול
+          </button>
+          <button onClick={onApprove} disabled={!canApprove || busy}>
+            {busy ? 'שומר…' : 'אישור והוספה'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }

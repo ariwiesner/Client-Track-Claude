@@ -20,8 +20,9 @@ class ExtractionError(Exception):
 
 
 def extract_receipt(image_file) -> dict:
-    """Reads an uploaded receipt photo and returns extracted fields, never
-    touching the database — nothing is persisted until the worker approves.
+    """Reads a receipt photo (a freshly uploaded file, or a FieldFile
+    reopened from storage for a retry) and returns extracted fields.
+    Read-only against the database — never creates/updates rows itself.
     """
     image_file.seek(0)
     try:
@@ -34,7 +35,8 @@ def extract_receipt(image_file) -> dict:
         Client.objects.filter(is_active=True).values_list('name', flat=True)
     )
 
-    raw = _call_gemini(image_file.read(), image_file.content_type or 'image/jpeg', client_names)
+    mime_type = getattr(image_file, 'content_type', None) or 'image/jpeg'
+    raw = _call_gemini(image_file.read(), mime_type, client_names)
     coerced = _coerce_response(raw)
 
     client_id, score = _match_client(coerced.pop('client_name_guess'))

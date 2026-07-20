@@ -13,8 +13,15 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 import os
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Local dev convenience: real deployments set env vars directly (see
+# deploy/client-tracker-backend.service's EnvironmentFile) and don't need
+# this — load_dotenv() is a no-op if backend/.env doesn't exist.
+load_dotenv(BASE_DIR / '.env')
 
 
 # Quick-start development settings - unsuitable for production

@@ -5,6 +5,7 @@ from django.urls import path
 from core.views import (
     ClientViewSet,
     MonthlyBillingViewSet,
+    ReceiptChatViewSet,
     ReceiptViewSet,
     TimeEntryViewSet,
     TrackedSystemViewSet,
@@ -22,6 +23,7 @@ router.register('time-entries', TimeEntryViewSet, basename='timeentry')
 router.register('billing', MonthlyBillingViewSet, basename='monthlybilling')
 router.register('workers', WorkerViewSet, basename='worker')
 router.register('receipts', ReceiptViewSet, basename='receipt')
+router.register('receipt-chat', ReceiptChatViewSet, basename='receiptchatupload')
 
 urlpatterns = [
     path('auth/login/', login_view, name='login'),

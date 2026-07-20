@@ -1,8 +1,10 @@
-from datetime import timedelta
-from decimal import Decimal
+import os
+from datetime import date, timedelta
+from decimal import Decimal, InvalidOperation
 
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
+from django.core.files.base import ContentFile
 from django.db.models import DurationField, ExpressionWrapper, F, Sum
 from django.utils import timezone
 from rest_framework import status, viewsets
@@ -12,17 +14,20 @@ from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 
-from core.models import Client, MonthlyBilling, Receipt, TimeEntry, TrackedSystem
+from core.models import Client, MonthlyBilling, Receipt, ReceiptChatUpload, TimeEntry, TrackedSystem
 from core.serializers import (
     ClientSerializer,
     CreateWorkerSerializer,
     MonthlyBillingSerializer,
+    ReceiptChatUploadSerializer,
     ReceiptSerializer,
     TimeEntrySerializer,
     TrackedSystemSerializer,
     UserSerializer,
 )
 from core.services import billing, receipt_llm
+
+RECEIPT_CHAT_RETENTION_DAYS = 7
 
 
 @api_view(['POST'])
@@ -314,9 +319,9 @@ class MonthlyBillingViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class ReceiptViewSet(viewsets.ModelViewSet):
-    """Available to every worker (default IsAuthenticated) — receipts are
-    approved-only by construction: nothing is persisted until the worker
-    confirms the fields via /extract/, so no edit/delete in v1.
+    """Available to every worker (default IsAuthenticated). Approved
+    receipts are permanent — creation normally happens via
+    ReceiptChatViewSet.approve, not directly against this endpoint.
     """
     http_method_names = ['get', 'post']
     serializer_class = ReceiptSerializer
@@ -337,12 +342,113 @@ class ReceiptViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
 
-    @action(detail=False, methods=['post'])
-    def extract(self, request):
+
+class ReceiptChatViewSet(viewsets.ModelViewSet):
+    """A worker's personal receipt-chat history — every upload attempt
+    (pending review, approved, discarded, or failed extraction), kept for
+    RECEIPT_CHAT_RETENTION_DAYS so navigating away and back still shows
+    what was uploaded. Scoped to request.user; no shared/team visibility
+    (approved receipts themselves are shared, via ReceiptViewSet).
+    """
+    http_method_names = ['get', 'post']
+    serializer_class = ReceiptChatUploadSerializer
+
+    def get_queryset(self):
+        cutoff = timezone.now() - timedelta(days=RECEIPT_CHAT_RETENTION_DAYS)
+        stale = ReceiptChatUpload.objects.filter(created_by=self.request.user, created_at__lt=cutoff)
+        for upload in stale:
+            upload.image.delete(save=False)
+            upload.delete()
+        return ReceiptChatUpload.objects.filter(created_by=self.request.user).select_related('receipt')
+
+    def create(self, request, *args, **kwargs):
         image = request.FILES.get('image')
         if not image:
             return Response({'detail': 'image is required'}, status=status.HTTP_400_BAD_REQUEST)
+
         try:
-            return Response(receipt_llm.extract_receipt(image))
+            extraction = receipt_llm.extract_receipt(image)
+            upload_status = ReceiptChatUpload.STATUS_PENDING
+            error_message = ''
         except receipt_llm.ExtractionError as exc:
-            return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+            extraction = {}
+            upload_status = ReceiptChatUpload.STATUS_ERROR
+            error_message = str(exc)
+
+        image.seek(0)
+        upload = ReceiptChatUpload.objects.create(
+            created_by=request.user, image=image, status=upload_status,
+            extraction=extraction, error_message=error_message,
+        )
+        serializer = self.get_serializer(upload)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['post'])
+    def approve(self, request, pk=None):
+        upload = self.get_object()
+        if upload.status != ReceiptChatUpload.STATUS_PENDING:
+            return Response({'detail': 'הקבלה כבר טופלה'}, status=status.HTTP_400_BAD_REQUEST)
+
+        client = Client.objects.filter(pk=request.data.get('client'), is_active=True).first()
+        if not client:
+            return Response({'detail': 'יש לבחור לקוח'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            amount = Decimal(str(request.data.get('amount')))
+        except (InvalidOperation, TypeError, ValueError):
+            return Response({'detail': 'סכום לא תקין'}, status=status.HTTP_400_BAD_REQUEST)
+
+        category = request.data.get('category')
+        if category not in {value for value, _label in Receipt.CATEGORY_CHOICES}:
+            return Response({'detail': 'קטגוריה לא תקינה'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            receipt_date = date.fromisoformat(request.data.get('receipt_date', ''))
+        except ValueError:
+            return Response({'detail': 'תאריך לא תקין'}, status=status.HTTP_400_BAD_REQUEST)
+
+        receipt = Receipt(
+            client=client,
+            amount=amount,
+            receipt_number=request.data.get('receipt_number', ''),
+            category=category,
+            receipt_date=receipt_date,
+            created_by=request.user,
+        )
+        upload.image.open('rb')
+        receipt.image.save(os.path.basename(upload.image.name), ContentFile(upload.image.read()), save=False)
+        upload.image.close()
+        receipt.save()
+
+        upload.status = ReceiptChatUpload.STATUS_APPROVED
+        upload.receipt = receipt
+        upload.save(update_fields=['status', 'receipt'])
+
+        return Response(self.get_serializer(upload).data)
+
+    @action(detail=True, methods=['post'])
+    def discard(self, request, pk=None):
+        upload = self.get_object()
+        if upload.status != ReceiptChatUpload.STATUS_PENDING:
+            return Response({'detail': 'הקבלה כבר טופלה'}, status=status.HTTP_400_BAD_REQUEST)
+        upload.status = ReceiptChatUpload.STATUS_DISCARDED
+        upload.save(update_fields=['status'])
+        return Response(self.get_serializer(upload).data)
+
+    @action(detail=True, methods=['post'])
+    def retry(self, request, pk=None):
+        upload = self.get_object()
+        if upload.status != ReceiptChatUpload.STATUS_ERROR:
+            return Response({'detail': 'ניתן לנסות שוב רק קבלה שנכשלה'}, status=status.HTTP_400_BAD_REQUEST)
+
+        upload.image.open('rb')
+        try:
+            upload.extraction = receipt_llm.extract_receipt(upload.image)
+            upload.status = ReceiptChatUpload.STATUS_PENDING
+            upload.error_message = ''
+        except receipt_llm.ExtractionError as exc:
+            upload.error_message = str(exc)
+        finally:
+            upload.image.close()
+        upload.save(update_fields=['status', 'extraction', 'error_message'])
+        return Response(self.get_serializer(upload).data)
