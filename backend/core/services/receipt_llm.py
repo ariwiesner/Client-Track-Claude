@@ -1,3 +1,4 @@
+import io
 import json
 from decimal import Decimal, InvalidOperation
 
@@ -32,7 +33,25 @@ def extract_receipt(image_file) -> dict:
     image_file.seek(0)
 
     mime_type = getattr(image_file, 'content_type', None) or 'image/jpeg'
-    raw = _call_gemini(image_file.read(), mime_type)
+    original_bytes = image_file.read()
+    raw = _call_gemini(original_bytes, mime_type)
+
+    if not raw.get('client_name_guess'):
+        # A sideways/rotated photo: the model reliably keeps reading
+        # numeric fields (amount/date/receipt number) but can silently
+        # miss a smaller name field entirely rather than misreading it —
+        # confirmed by testing the same real receipt both ways. Asking the
+        # model to self-report its own rotation was unreliable, so instead
+        # just try the other 3 orientations and keep whichever one finds a
+        # name. Only runs for the subset of uploads where the straight-on
+        # attempt didn't find one, so the common case (already upright)
+        # costs a single call as before.
+        for angle in (90, 180, 270):
+            retry_raw = _call_gemini(_rotate_image_bytes(original_bytes, angle), 'image/png')
+            if retry_raw.get('client_name_guess'):
+                raw = retry_raw
+                break
+
     coerced = _coerce_response(raw)
 
     client_id, score, suggestion = _match_client(coerced.pop('client_name_guess'))
@@ -40,6 +59,14 @@ def extract_receipt(image_file) -> dict:
     coerced['client_match_score'] = score
     coerced['client_suggestion'] = suggestion
     return coerced
+
+
+def _rotate_image_bytes(image_bytes: bytes, angle: int) -> bytes:
+    img = Image.open(io.BytesIO(image_bytes))
+    rotated = img.rotate(angle, expand=True)
+    out = io.BytesIO()
+    rotated.convert('RGB').save(out, format='PNG')
+    return out.getvalue()
 
 
 def _call_gemini(image_bytes: bytes, mime_type: str) -> dict:
@@ -67,10 +94,20 @@ Extract these fields and return STRICT JSON only, no markdown, no commentary:
   "category": one of the category ids below
 }}
 
-client_name_guess must be a name or business actually printed on THIS
-receipt (e.g. a "לכבוד" / customer / recipient / billed-to field) — copy it
-as written. If no such name is legible anywhere on the receipt, use null.
-Do not guess, invent, or substitute any other name.
+client_name_guess is the CUSTOMER this receipt was issued to — a person or
+business name printed anywhere on the receipt, not only next to an
+explicit "לכבוד"/customer/recipient label. It's often unlabeled: printed by
+itself near the top, in an address block, or beside an ID number.
+
+Do NOT use the issuing store/business's own name for this — that's the
+seller, always shown as the letterhead with its own logo, phone numbers,
+and business address (usually the most prominent text on the page, often
+top-right). The customer name (if present) is a second, separate name
+elsewhere on the page identifying who the receipt was made out to.
+
+Copy the customer name exactly as written. If no such second name is
+legible anywhere on the receipt, use null. Never substitute the seller's
+name, and never invent a name that isn't printed on the receipt.
 
 Fixed category ids to choose from (pick the closest, default to "other" if unsure):
 {category_lines}
