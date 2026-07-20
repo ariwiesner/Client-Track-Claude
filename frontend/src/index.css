@@ -945,6 +945,24 @@ button:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
 .chat-review-actions { display: flex; gap: var(--space-2); margin-top: var(--space-1); }
 .chat-review-actions button { flex: 1; }
 
+.duplicate-warning {
+  margin-top: var(--space-1);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border);
+}
+.duplicate-warning p.error {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0 0 var(--space-2);
+}
+.duplicate-warning .chat-review-actions button.danger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
 .link-button {
   background: none;
   border: none;

@@ -407,10 +407,28 @@ class ReceiptChatViewSet(viewsets.ModelViewSet):
         except ValueError:
             return Response({'detail': 'תאריך לא תקין'}, status=status.HTTP_400_BAD_REQUEST)
 
+        receipt_number = request.data.get('receipt_number', '')
+        force = str(request.data.get('force', '')).lower() in ('1', 'true', 'yes')
+
+        if not force:
+            existing = Receipt.objects.filter(client=client)
+            duplicate = None
+            if receipt_number:
+                duplicate = existing.filter(receipt_number=receipt_number).first()
+            if not duplicate:
+                duplicate = existing.filter(amount=amount, receipt_date=receipt_date).first()
+            if duplicate:
+                return Response(
+                    {'duplicate': True, 'existing_receipt': ReceiptSerializer(
+                        duplicate, context=self.get_serializer_context()
+                    ).data},
+                    status=status.HTTP_409_CONFLICT,
+                )
+
         receipt = Receipt(
             client=client,
             amount=amount,
-            receipt_number=request.data.get('receipt_number', ''),
+            receipt_number=receipt_number,
             category=category,
             receipt_date=receipt_date,
             created_by=request.user,

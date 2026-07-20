@@ -18,6 +18,16 @@ function UploadIcon() {
   );
 }
 
+function WarningIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+      <path d="M12 3.5 21.5 20h-19L12 3.5Z" strokeLinejoin="round" />
+      <path d="M12 9.5v5" strokeLinecap="round" />
+      <circle cx="12" cy="17.2" r="0.9" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
 function buildForm(extraction) {
   return {
     client: extraction?.client_id ? String(extraction.client_id) : '',
@@ -60,8 +70,14 @@ export function ReceiptChatPage() {
 
   function updateField(id, field, value) {
     setEntries((prev) =>
-      prev.map((e) => (e.id === id ? { ...e, form: { ...e.form, [field]: value } } : e))
+      prev.map((e) =>
+        e.id === id ? { ...e, form: { ...e.form, [field]: value }, duplicateWarning: null } : e
+      )
     );
+  }
+
+  function clearDuplicateWarning(id) {
+    setEntries((prev) => prev.map((e) => (e.id === id ? { ...e, duplicateWarning: null } : e)));
   }
 
   async function handleFileSelect(e) {
@@ -80,14 +96,20 @@ export function ReceiptChatPage() {
     }
   }
 
-  async function handleApprove(entry) {
+  async function handleApprove(entry, force = false) {
     setBusyId(entry.id);
     setError('');
     try {
-      const updated = await api.approveReceiptChat(entry.id, entry.form);
+      const updated = await api.approveReceiptChat(entry.id, { ...entry.form, force });
       replaceEntry(entry.id, updated);
     } catch (err) {
-      setError(err.message);
+      if (err.status === 409 && err.data?.existing_receipt) {
+        setEntries((prev) =>
+          prev.map((e) => (e.id === entry.id ? { ...e, duplicateWarning: err.data.existing_receipt } : e))
+        );
+      } else {
+        setError(err.message);
+      }
     } finally {
       setBusyId(null);
     }
@@ -139,6 +161,8 @@ export function ReceiptChatPage() {
             busy={busyId === entry.id}
             onFieldChange={(field, value) => updateField(entry.id, field, value)}
             onApprove={() => handleApprove(entry)}
+            onForceApprove={() => handleApprove(entry, true)}
+            onDismissWarning={() => clearDuplicateWarning(entry.id)}
             onDiscard={() => handleDiscard(entry)}
             onRetry={() => handleRetry(entry)}
           />
@@ -168,7 +192,17 @@ export function ReceiptChatPage() {
   );
 }
 
-function ChatEntry({ entry, clients, busy, onFieldChange, onApprove, onDiscard, onRetry }) {
+function ChatEntry({
+  entry,
+  clients,
+  busy,
+  onFieldChange,
+  onApprove,
+  onForceApprove,
+  onDismissWarning,
+  onDiscard,
+  onRetry,
+}) {
   if (entry.status === 'error') {
     return (
       <div className="chat-bubble assistant error">
@@ -286,14 +320,33 @@ function ChatEntry({ entry, clients, busy, onFieldChange, onApprove, onDiscard, 
           </select>
         </label>
 
-        <div className="chat-review-actions">
-          <button className="secondary" onClick={onDiscard} disabled={busy}>
-            ביטול
-          </button>
-          <button onClick={onApprove} disabled={!canApprove || busy}>
-            {busy ? 'שומר…' : 'אישור והוספה'}
-          </button>
-        </div>
+        {entry.duplicateWarning ? (
+          <div className="duplicate-warning">
+            <p className="error">
+              <WarningIcon /> קבלה עם אותם פרטים כבר קיימת עבור לקוח זה — מספר קבלה{' '}
+              {entry.duplicateWarning.receipt_number || '—'}, ₪
+              {Number(entry.duplicateWarning.amount).toFixed(2)},{' '}
+              {new Date(entry.duplicateWarning.receipt_date).toLocaleDateString('he-IL')}.
+            </p>
+            <div className="chat-review-actions">
+              <button className="secondary" onClick={onDismissWarning} disabled={busy}>
+                ביטול
+              </button>
+              <button className="danger" onClick={onForceApprove} disabled={busy}>
+                <WarningIcon /> {busy ? 'שומר…' : 'הוסף בכל זאת'}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="chat-review-actions">
+            <button className="secondary" onClick={onDiscard} disabled={busy}>
+              ביטול
+            </button>
+            <button onClick={onApprove} disabled={!canApprove || busy}>
+              {busy ? 'שומר…' : 'אישור והוספה'}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

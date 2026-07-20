@@ -9,13 +9,17 @@ async function handleResponse(res) {
 
   if (!res.ok) {
     let detail = `Request failed (${res.status})`;
+    let data = null;
     try {
-      const data = await res.json();
+      data = await res.json();
       detail = data.detail || JSON.stringify(data);
     } catch {
       // ignore parse errors, use default detail
     }
-    throw new Error(detail);
+    const err = new Error(detail);
+    err.status = res.status;
+    err.data = data;
+    throw err;
   }
 
   const text = await res.text();
