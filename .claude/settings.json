@@ -84,7 +84,9 @@
       "Bash(xargs grep -l \"Route\\\\|Routes\")",
       "Bash(find '/c/Users/ארי ויזנר/Desktop/Claude Client Tracker' -iname *.spec -not -path */venv/* -not -path */node_modules/*)",
       "Bash(find '/c/Users/ארי ויזנר/Desktop/Claude Client Tracker' -iname readme* -o -iname deploy* -o -iname install*)",
-      "Bash(npx vite *)"
+      "Bash(npx vite *)",
+      "Bash(powershell -Command 'Get-Process python -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowTitle -eq '\\\\'''\\\\'' } | Select-Object Id')",
+      "Bash(powershell -Command \"Stop-Process -Id 21996 -Force\")"
     ],
     "additionalDirectories": [
       "C:\\Users\\ארי ויזנר\\AppData\\Local\\mkcert",
