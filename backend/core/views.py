@@ -12,16 +12,17 @@ from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 
-from core.models import Client, MonthlyBilling, TimeEntry, TrackedSystem
+from core.models import Client, MonthlyBilling, Receipt, TimeEntry, TrackedSystem
 from core.serializers import (
     ClientSerializer,
     CreateWorkerSerializer,
     MonthlyBillingSerializer,
+    ReceiptSerializer,
     TimeEntrySerializer,
     TrackedSystemSerializer,
     UserSerializer,
 )
-from core.services import billing
+from core.services import billing, receipt_llm
 
 
 @api_view(['POST'])
@@ -310,3 +311,38 @@ class MonthlyBillingViewSet(viewsets.ReadOnlyModelViewSet):
         row = self.get_object()
         row = billing.toggle_paid(row)
         return Response(MonthlyBillingSerializer(row).data)
+
+
+class ReceiptViewSet(viewsets.ModelViewSet):
+    """Available to every worker (default IsAuthenticated) — receipts are
+    approved-only by construction: nothing is persisted until the worker
+    confirms the fields via /extract/, so no edit/delete in v1.
+    """
+    http_method_names = ['get', 'post']
+    serializer_class = ReceiptSerializer
+
+    def get_queryset(self):
+        qs = Receipt.objects.select_related('client', 'created_by')
+        client_id = self.request.query_params.get('client')
+        year = self.request.query_params.get('year')
+        month = self.request.query_params.get('month')
+        if client_id:
+            qs = qs.filter(client_id=client_id)
+        if year:
+            qs = qs.filter(receipt_date__year=int(year))
+        if month:
+            qs = qs.filter(receipt_date__month=int(month))
+        return qs
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
+    @action(detail=False, methods=['post'])
+    def extract(self, request):
+        image = request.FILES.get('image')
+        if not image:
+            return Response({'detail': 'image is required'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            return Response(receipt_llm.extract_receipt(image))
+        except receipt_llm.ExtractionError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)

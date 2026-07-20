@@ -1,7 +1,7 @@
 from django.contrib.auth.models import User
 from rest_framework import serializers
 
-from core.models import Client, MonthlyBilling, TimeEntry, TrackedSystem
+from core.models import Client, MonthlyBilling, Receipt, TimeEntry, TrackedSystem
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -87,3 +87,23 @@ class MonthlyBillingSerializer(serializers.ModelSerializer):
             'id', 'client', 'year', 'month', 'total_hours', 'amount_owed',
             'paid', 'paid_at',
         ]
+
+
+class ReceiptSerializer(serializers.ModelSerializer):
+    client_name = serializers.CharField(source='client.name', read_only=True)
+    category_display = serializers.CharField(source='get_category_display', read_only=True)
+    created_by_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Receipt
+        fields = [
+            'id', 'client', 'client_name', 'amount', 'receipt_number',
+            'category', 'category_display', 'receipt_date', 'image',
+            'created_by_name', 'created_at',
+        ]
+        read_only_fields = ['created_at']
+
+    def get_created_by_name(self, obj):
+        if not obj.created_by:
+            return None
+        return obj.created_by.first_name or obj.created_by.username

@@ -137,3 +137,38 @@ class MonthlyBilling(models.Model):
 
     def __str__(self):
         return f"{self.client} — {self.year}-{self.month:02d}"
+
+
+class Receipt(models.Model):
+    CATEGORY_FOOD = 'food'
+    CATEGORY_OFFICE_SUPPLIES = 'office_supplies'
+    CATEGORY_TRAVEL = 'travel'
+    CATEGORY_BUSINESS = 'business'
+    CATEGORY_OTHER = 'other'
+    CATEGORY_CHOICES = [
+        (CATEGORY_FOOD, 'מזון'),
+        (CATEGORY_OFFICE_SUPPLIES, 'ציוד משרדי'),
+        (CATEGORY_TRAVEL, 'נסיעות'),
+        (CATEGORY_BUSINESS, 'עבור העסק'),
+        (CATEGORY_OTHER, 'אחר'),
+    ]
+
+    client = models.ForeignKey(Client, on_delete=models.CASCADE, related_name='receipts')
+    amount = models.DecimalField(max_digits=10, decimal_places=2, verbose_name='סכום')
+    receipt_number = models.CharField(max_length=100, blank=True, verbose_name='מספר קבלה')
+    category = models.CharField(
+        max_length=20, choices=CATEGORY_CHOICES, default=CATEGORY_OTHER, verbose_name='קטגוריה'
+    )
+    receipt_date = models.DateField(verbose_name='תאריך הקבלה')
+    image = models.ImageField(upload_to='receipts/%Y/%m/', verbose_name='תמונת הקבלה')
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='receipts'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-receipt_date', '-created_at']
+        verbose_name_plural = 'Receipts'
+
+    def __str__(self):
+        return f"{self.client} — {self.receipt_date} — ₪{self.amount}"

@@ -12,6 +12,7 @@ const STATIC_TITLES = {
   '/manual-entry': 'רישום שעות',
   '/workers': 'עובדים',
   '/profile': 'הפרופיל שלי',
+  '/receipts': 'קבלות',
 };
 
 function pageTitle(pathname) {

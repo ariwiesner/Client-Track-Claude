@@ -145,6 +145,15 @@ USE_I18N = True
 USE_TZ = True
 
 
+# Uploaded receipt photos (dev-only serving is wired up in config/urls.py —
+# production needs a reverse-proxy /media/* block, see deploy/Caddyfile).
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
+
+# Real secret — no insecure dev fallback like DJANGO_SECRET_KEY has.
+GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
+
+
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 

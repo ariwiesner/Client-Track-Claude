@@ -4,17 +4,7 @@ function getToken() {
   return localStorage.getItem('token');
 }
 
-async function request(path, { method = 'GET', body } = {}) {
-  const headers = { 'Content-Type': 'application/json' };
-  const token = getToken();
-  if (token) headers['Authorization'] = `Token ${token}`;
-
-  const res = await fetch(`${API_URL}${path}`, {
-    method,
-    headers,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
-
+async function handleResponse(res) {
   if (res.status === 204) return null;
 
   if (!res.ok) {
@@ -30,6 +20,32 @@ async function request(path, { method = 'GET', body } = {}) {
 
   const text = await res.text();
   return text ? JSON.parse(text) : null;
+}
+
+async function request(path, { method = 'GET', body } = {}) {
+  const headers = { 'Content-Type': 'application/json' };
+  const token = getToken();
+  if (token) headers['Authorization'] = `Token ${token}`;
+
+  const res = await fetch(`${API_URL}${path}`, {
+    method,
+    headers,
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+
+  return handleResponse(res);
+}
+
+// For file uploads: no Content-Type header (the browser sets the multipart
+// boundary itself) and no JSON.stringify — `formData` is sent as-is.
+async function requestForm(path, formData, { method = 'POST' } = {}) {
+  const headers = {};
+  const token = getToken();
+  if (token) headers['Authorization'] = `Token ${token}`;
+
+  const res = await fetch(`${API_URL}${path}`, { method, headers, body: formData });
+
+  return handleResponse(res);
 }
 
 export const api = {
@@ -70,4 +86,22 @@ export const api = {
 
   getMySummary: (year, month) => request(`/me/summary/?year=${year}&month=${month}`),
   changePassword: (data) => request('/auth/change-password/', { method: 'POST', body: data }),
+
+  extractReceipt: (imageFile) => {
+    const fd = new FormData();
+    fd.append('image', imageFile);
+    return requestForm('/receipts/extract/', fd);
+  },
+  createReceipt: (fields, imageFile) => {
+    const fd = new FormData();
+    fd.append('image', imageFile);
+    fd.append('client', fields.client);
+    fd.append('amount', fields.amount);
+    fd.append('receipt_number', fields.receipt_number || '');
+    fd.append('category', fields.category);
+    fd.append('receipt_date', fields.receipt_date);
+    return requestForm('/receipts/', fd);
+  },
+  listReceipts: (clientId, year, month) =>
+    request(`/receipts/?client=${clientId}&year=${year}&month=${month}`),
 };

@@ -5,6 +5,7 @@ __pycache__/
 *.pyc
 backend/db.sqlite3
 backend/staticfiles/
+backend/media/
 
 # Node / React
 frontend/node_modules/
