@@ -1,0 +1,15 @@
+[Unit]
+Description=Client Tracker Django backend (gunicorn)
+After=network.target
+
+[Service]
+Type=simple
+User=deploy
+WorkingDirectory=/opt/client-tracker/backend
+EnvironmentFile=/opt/client-tracker/backend/.env
+ExecStart=/opt/client-tracker/backend/venv/bin/gunicorn config.wsgi:application --bind 127.0.0.1:8000 --workers 3
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

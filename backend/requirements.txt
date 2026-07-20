@@ -1,0 +1,15 @@
+asgiref==3.12.1
+cffi==2.1.0
+cryptography==49.0.0
+Django==5.2.16
+django-cors-headers==4.9.0
+django-extensions==4.1
+djangorestframework==3.17.1
+gunicorn==23.0.0
+MarkupSafe==3.0.3
+pycparser==3.0
+pyOpenSSL==26.3.0
+sqlparse==0.5.5
+typing_extensions==4.16.0
+tzdata==2026.3
+Werkzeug==3.1.8

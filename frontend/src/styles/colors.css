@@ -1,0 +1,106 @@
+/* =====================================================================
+   Color tokens — single source of truth for the whole site.
+   Palette matches the approved reference: soft lavender-grey app
+   background, white cards/sidebar, one cyan brand accent, and a small
+   rotating icon palette for per-client avatars. Import this file first
+   in index.css; every other stylesheet should reference these
+   variables rather than hardcoding colors.
+   ===================================================================== */
+
+:root {
+  /* Neutrals */
+  --grey-0: #ffffff;
+  --grey-50: #f4f5fa;
+  --grey-100: #eceef6;
+  --grey-200: #dfe1ec;
+  --grey-300: #c7c9db;
+  --grey-500: #8f92ab;
+  --grey-700: #5b5e79;
+  --grey-900: #201f36;
+
+  --bg: var(--grey-50);
+  --surface: var(--grey-0);
+  --sidebar-surface: var(--grey-0);
+  --border: var(--grey-100);
+  --border-strong: var(--grey-200);
+  --text: var(--grey-900);
+  --text-muted: var(--grey-700);
+  --text-faint: var(--grey-500);
+
+  /* Brand — cyan, used for the active nav pill, the "+" action and
+     primary buttons. */
+  --accent: #17c1e8;
+  --accent-hover: #12a8cb;
+  --accent-text: #ffffff;
+  --accent-tint: #e4f8fc;
+
+  /* Paid / unpaid signal */
+  --signal-ok: #2fa86e;
+  --signal-ok-bg: #e9f8f0;
+  --signal-ok-border: #c3ecd7;
+  --signal-warn: #e0554a;
+  --signal-warn-bg: #fdeceb;
+  --signal-warn-border: #f7cac6;
+
+  /* Rotating avatar palette — cycled by card index, never by meaning. */
+  --avatar-1-bg: #fce4ec;
+  --avatar-1-fg: #d6336c;
+  --avatar-2-bg: #e3f9ee;
+  --avatar-2-fg: #1f9d63;
+  --avatar-3-bg: #e5eeff;
+  --avatar-3-fg: #3762e0;
+  --avatar-4-bg: #fff1e0;
+  --avatar-4-fg: #e0781c;
+  --avatar-5-bg: #f1e9ff;
+  --avatar-5-fg: #7c4fe0;
+  --avatar-6-bg: #e0f7f7;
+  --avatar-6-fg: #128a8a;
+
+  --shadow-sm: 0 1px 2px rgba(32, 31, 54, 0.04), 0 1px 1px rgba(32, 31, 54, 0.03);
+  --shadow-md: 0 4px 10px rgba(32, 31, 54, 0.06), 0 12px 28px rgba(32, 31, 54, 0.08);
+  --shadow-lg: 0 10px 20px rgba(32, 31, 54, 0.08), 0 28px 56px rgba(32, 31, 54, 0.12);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --grey-0: #201f30;
+    --grey-50: #17162a;
+    --grey-100: #262538;
+    --grey-200: #34334a;
+    --grey-300: #454363;
+    --grey-500: #9391ab;
+    --grey-700: #c2c0d6;
+    --grey-900: #f0efff;
+
+    --sidebar-surface: #1b1a29;
+
+    --accent: #35d0f2;
+    --accent-hover: #5cdaf4;
+    --accent-text: #0b1b20;
+    --accent-tint: #10333b;
+
+    --signal-ok: #55c78c;
+    --signal-ok-bg: #142a20;
+    --signal-ok-border: #234a37;
+    --signal-warn: #ec7d72;
+    --signal-warn-bg: #2c1917;
+    --signal-warn-border: #4a2a26;
+
+    --avatar-1-bg: #3a2230;
+    --avatar-1-fg: #f290b6;
+    --avatar-2-bg: #1c3a2c;
+    --avatar-2-fg: #6fd9a3;
+    --avatar-3-bg: #202c48;
+    --avatar-3-fg: #91aeff;
+    --avatar-4-bg: #402c17;
+    --avatar-4-fg: #f5b06b;
+    --avatar-5-bg: #2e2148;
+    --avatar-5-fg: #bc9bff;
+    --avatar-6-bg: #143333;
+    --avatar-6-fg: #6fd6d6;
+
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.35), 0 12px 32px rgba(0, 0, 0, 0.35);
+    --shadow-lg: 0 12px 24px rgba(0, 0, 0, 0.4), 0 32px 64px rgba(0, 0, 0, 0.5);
+  }
+}

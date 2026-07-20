@@ -1,0 +1,19 @@
+tracker.example.com {
+	# Frontend: the built React app (static files)
+	root * /opt/client-tracker/frontend/dist
+	encode gzip
+	try_files {path} /index.html
+	file_server
+
+	# Backend API: reverse-proxied to gunicorn, path-prefixed so the
+	# same domain + automatic HTTPS cert serve both frontend and API.
+	handle /api/* {
+		reverse_proxy 127.0.0.1:8000
+	}
+	handle /admin/* {
+		reverse_proxy 127.0.0.1:8000
+	}
+	handle /static/* {
+		reverse_proxy 127.0.0.1:8000
+	}
+}
