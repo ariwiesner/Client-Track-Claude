@@ -945,6 +945,20 @@ button:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
 .chat-review-actions { display: flex; gap: var(--space-2); margin-top: var(--space-1); }
 .chat-review-actions button { flex: 1; }
 
+.link-button {
+  background: none;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+  min-height: auto;
+  display: inline;
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.link-button:hover { color: var(--accent-hover); }
+
 .chat-upload-zone {
   position: sticky;
   bottom: var(--space-3);

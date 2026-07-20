@@ -232,12 +232,20 @@ function ChatEntry({ entry, clients, busy, onFieldChange, onApprove, onDiscard, 
         {form.client && entry.extraction?.client_match_score != null && (
           <p className="hint">זוהה אוטומטית ({Math.round(entry.extraction.client_match_score)}%)</p>
         )}
-        {!form.client && entry.extraction?.client_name_guess && (
+        {!form.client && entry.extraction?.client_suggestion && (
           <p className="error">
-            לא זוהה לקוח בוודאות (נראה כמו "{entry.extraction.client_name_guess}") — יש לבחור ידנית.
+            לא נמצא לקוח מתאים בוודאות. הקרוב ביותר: "{entry.extraction.client_suggestion.name}"
+            {' '}
+            <button
+              type="button"
+              className="link-button"
+              onClick={() => onFieldChange('client', String(entry.extraction.client_suggestion.client_id))}
+            >
+              בחירה
+            </button>
           </p>
         )}
-        {!form.client && !entry.extraction?.client_name_guess && (
+        {!form.client && !entry.extraction?.client_suggestion && (
           <p className="error">לא זוהה לקוח — יש לבחור ידנית.</p>
         )}
 

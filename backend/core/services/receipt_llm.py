@@ -31,21 +31,18 @@ def extract_receipt(image_file) -> dict:
         raise ExtractionError('הקובץ שהועלה אינו תמונה תקינה') from exc
     image_file.seek(0)
 
-    client_names = list(
-        Client.objects.filter(is_active=True).values_list('name', flat=True)
-    )
-
     mime_type = getattr(image_file, 'content_type', None) or 'image/jpeg'
-    raw = _call_gemini(image_file.read(), mime_type, client_names)
+    raw = _call_gemini(image_file.read(), mime_type)
     coerced = _coerce_response(raw)
 
-    client_id, score = _match_client(coerced.pop('client_name_guess'))
+    client_id, score, suggestion = _match_client(coerced.pop('client_name_guess'))
     coerced['client_id'] = client_id
     coerced['client_match_score'] = score
+    coerced['client_suggestion'] = suggestion
     return coerced
 
 
-def _call_gemini(image_bytes: bytes, mime_type: str, client_names: list[str]) -> dict:
+def _call_gemini(image_bytes: bytes, mime_type: str) -> dict:
     if not settings.GEMINI_API_KEY:
         raise ExtractionError('GEMINI_API_KEY אינו מוגדר בשרת')
 
@@ -53,8 +50,13 @@ def _call_gemini(image_bytes: bytes, mime_type: str, client_names: list[str]) ->
     from google.genai import types
 
     category_lines = '\n'.join(f'- {value}: {label}' for value, label in Receipt.CATEGORY_CHOICES)
-    names_block = '\n'.join(f'- {name}' for name in client_names) or '(no known clients)'
 
+    # Deliberately NOT given the office's client list: earlier versions of
+    # this prompt included it as "grounding" and asked the model to guess
+    # the closest match, which just invited it to invent a plausible-looking
+    # name from that list even when the receipt didn't actually name any
+    # client. Matching against real clients happens purely server-side in
+    # _match_client — this call only transcribes what's actually printed.
     prompt = f"""You are reading a business receipt (קבלה) photo for an Israeli bookkeeping office.
 Extract these fields and return STRICT JSON only, no markdown, no commentary:
 {{
@@ -65,15 +67,15 @@ Extract these fields and return STRICT JSON only, no markdown, no commentary:
   "category": one of the category ids below
 }}
 
-Known clients this receipt might belong to (guess the closest match if the
-receipt names a business, even if not an exact string match):
-{names_block}
+client_name_guess must be a name or business actually printed on THIS
+receipt (e.g. a "לכבוד" / customer / recipient / billed-to field) — copy it
+as written. If no such name is legible anywhere on the receipt, use null.
+Do not guess, invent, or substitute any other name.
 
 Fixed category ids to choose from (pick the closest, default to "other" if unsure):
 {category_lines}
 
-If a field is unreadable, use null (or "" for receipt_number). Never invent
-a client name that looks nothing like the receipt content."""
+If a field is unreadable, use null (or "" for receipt_number)."""
 
     try:
         client = genai.Client(api_key=settings.GEMINI_API_KEY)
@@ -116,18 +118,27 @@ def _coerce_response(raw: dict) -> dict:
     }
 
 
-def _match_client(candidate: str | None) -> tuple[int | None, float | None]:
+def _match_client(candidate: str | None):
+    """Fuzzy-matches candidate against active clients.
+
+    Returns (client_id, score, suggestion): client_id/score are only set
+    when the match clears MATCH_CONFIDENCE_THRESHOLD (safe to auto-fill).
+    suggestion is the best candidate regardless of threshold — a "closest
+    match" hint the worker can confirm with one click even when it's not
+    confident enough to auto-select.
+    """
     if not candidate:
-        return None, None
+        return None, None, None
 
     names = dict(Client.objects.filter(is_active=True).values_list('name', 'id'))
     if not names:
-        return None, None
+        return None, None, None
 
     best = process.extractOne(candidate, names.keys(), scorer=fuzz.WRatio)
     if not best:
-        return None, None
+        return None, None, None
     name, score, _ = best
+    suggestion = {'client_id': names[name], 'name': name, 'score': score}
     if score < MATCH_CONFIDENCE_THRESHOLD:
-        return None, None
-    return names[name], score
+        return None, None, suggestion
+    return names[name], score, suggestion
