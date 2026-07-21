@@ -2,6 +2,7 @@ import io
 import json
 from decimal import Decimal, InvalidOperation
 
+import fitz  # PyMuPDF
 from django.conf import settings
 from PIL import Image, ImageFilter, ImageOps, UnidentifiedImageError
 from rapidfuzz import fuzz, process
@@ -32,7 +33,6 @@ def extract_receipt(image_file) -> dict:
         raise ExtractionError('הקובץ שהועלה אינו תמונה תקינה') from exc
     image_file.seek(0)
 
-    mime_type = getattr(image_file, 'content_type', None) or 'image/jpeg'
     original_bytes = image_file.read()
     raw = _call_gemini(_prepare_image_bytes(original_bytes), 'image/png')
     all_names = list(raw.get('possible_names') or [])
@@ -58,6 +58,44 @@ def extract_receipt(image_file) -> dict:
             if _best_score(all_names) >= MATCH_CONFIDENCE_THRESHOLD:
                 break
 
+    return _finalize(raw, all_names)
+
+
+def extract_receipt_from_pdf(pdf_bytes: bytes) -> dict:
+    """Reads a receipt directly from a PDF's raw bytes — Gemini reads PDFs
+    natively (confirmed directly), so unlike a photo there's no local
+    preprocessing or rotation-retry to do here. Used for a single-page PDF,
+    or a multi-page PDF the worker said was one receipt spanning several
+    pages (see ReceiptChatViewSet.resolve_pages).
+    """
+    raw = _call_gemini(pdf_bytes, 'application/pdf')
+    all_names = list(raw.get('possible_names') or [])
+    return _finalize(raw, all_names)
+
+
+def is_pdf_bytes(data: bytes) -> bool:
+    return data[:5] == b'%PDF-'
+
+
+def count_pdf_pages(pdf_bytes: bytes) -> int:
+    with fitz.open(stream=pdf_bytes, filetype='pdf') as doc:
+        return doc.page_count
+
+
+def render_pdf_page_to_png(pdf_bytes: bytes, page_index: int) -> bytes:
+    """Rasterizes one page of a PDF to a PNG at a resolution generous
+    enough for OCR (2x zoom over the PDF's default 72dpi, ~144dpi) — used
+    when a multi-page PDF turns out to be several separate receipts, so
+    each one gets its own image (for its own ReceiptChatUpload thumbnail)
+    to run through the normal photo pipeline.
+    """
+    with fitz.open(stream=pdf_bytes, filetype='pdf') as doc:
+        page = doc[page_index]
+        pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
+        return pix.tobytes('png')
+
+
+def _finalize(raw: dict, all_names: list[str]) -> dict:
     coerced = _coerce_response(raw)
     coerced.pop('possible_names', None)
 
@@ -185,8 +223,19 @@ especially handwritten ones, before giving up."""
             # answer each time.
             config=types.GenerateContentConfig(response_mime_type='application/json', temperature=0.1),
         )
-        return json.loads(response.text)
-    except (json.JSONDecodeError, ValueError) as exc:
+        parsed = json.loads(response.text)
+        if isinstance(parsed, list):
+            # A multi-page PDF whose pages look like separate documents can
+            # make the model return one object per page despite the schema
+            # asking for a single object (seen directly: a 3-page PDF with
+            # 3 distinct-looking receipts on it). This path is only reached
+            # via extract_receipt_from_pdf when the worker has already said
+            # "this is one receipt spanning multiple pages" though, so take
+            # the first page's reading rather than erroring outright — the
+            # worker still reviews every field before approving regardless.
+            parsed = parsed[0] if parsed else {}
+        return parsed
+    except (json.JSONDecodeError, ValueError, IndexError, KeyError) as exc:
         raise ExtractionError('לא ניתן היה לפענח את תשובת המודל') from exc
     except Exception as exc:  # noqa: BLE001 — surface any SDK/network failure uniformly
         raise ExtractionError(f'שגיאה בפנייה למודל: {exc}') from exc

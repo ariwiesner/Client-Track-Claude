@@ -114,5 +114,8 @@ class ReceiptChatUploadSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ReceiptChatUpload
-        fields = ['id', 'image', 'status', 'extraction', 'error_message', 'receipt', 'created_at']
+        fields = [
+            'id', 'image', 'status', 'extraction', 'error_message', 'receipt',
+            'page_count', 'created_at',
+        ]
         read_only_fields = fields

@@ -907,6 +907,24 @@ button:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
   box-shadow: var(--shadow-sm);
 }
 
+.chat-pdf-thumb {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 140px;
+  padding: var(--space-4) var(--space-2);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+  background: var(--bg);
+  color: var(--text-muted);
+  text-decoration: none;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+.chat-pdf-thumb:hover { border-color: var(--accent); color: var(--accent); }
+
 .chat-review-card {
   display: flex;
   flex-direction: column;

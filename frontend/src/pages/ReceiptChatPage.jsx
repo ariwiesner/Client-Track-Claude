@@ -28,6 +28,31 @@ function WarningIcon() {
   );
 }
 
+function FileIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+      <path d="M6 3h8l5 5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z" strokeLinejoin="round" />
+      <path d="M14 3v5h5" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function isPdfUrl(url) {
+  return typeof url === 'string' && url.toLowerCase().split('?')[0].endsWith('.pdf');
+}
+
+function Thumbnail({ src }) {
+  if (isPdfUrl(src)) {
+    return (
+      <a href={src} target="_blank" rel="noopener noreferrer" className="chat-pdf-thumb">
+        <FileIcon />
+        <span>צפייה ב-PDF</span>
+      </a>
+    );
+  }
+  return <img src={src} alt="קבלה" className="chat-thumb" />;
+}
+
 function buildForm(extraction) {
   return {
     client: extraction?.client_id ? String(extraction.client_id) : '',
@@ -141,6 +166,23 @@ export function ReceiptChatPage() {
     }
   }
 
+  async function handleResolvePages(entry, split) {
+    setBusyId(entry.id);
+    setError('');
+    try {
+      const { entries: resolved } = await api.resolveReceiptChatPages(entry.id, split);
+      setEntries((prev) => {
+        const index = prev.findIndex((e) => e.id === entry.id);
+        if (index === -1) return prev;
+        return [...prev.slice(0, index), ...resolved.map(withForm), ...prev.slice(index + 1)];
+      });
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   return (
     <div className="chat-page">
       <p className="hint chat-intro">
@@ -165,6 +207,7 @@ export function ReceiptChatPage() {
             onDismissWarning={() => clearDuplicateWarning(entry.id)}
             onDiscard={() => handleDiscard(entry)}
             onRetry={() => handleRetry(entry)}
+            onResolvePages={(split) => handleResolvePages(entry, split)}
           />
         ))}
 
@@ -176,7 +219,7 @@ export function ReceiptChatPage() {
       <div className="chat-upload-zone">
         <input
           type="file"
-          accept="image/*"
+          accept="image/*,application/pdf"
           capture="environment"
           onChange={handleFileSelect}
           className="chat-file-input"
@@ -185,7 +228,7 @@ export function ReceiptChatPage() {
         />
         <label htmlFor="receipt-upload-input" className="button chat-upload-button">
           <UploadIcon />
-          העלאת תמונת קבלה
+          העלאת קבלה (תמונה או PDF)
         </label>
       </div>
     </div>
@@ -202,12 +245,35 @@ function ChatEntry({
   onDismissWarning,
   onDiscard,
   onRetry,
+  onResolvePages,
 }) {
+  if (entry.status === 'awaiting_page_choice') {
+    return (
+      <div className="chat-bubble assistant">
+        <div className="card chat-review-card">
+          <Thumbnail src={entry.image} />
+          <p>
+            הקובץ שהעליתם מכיל {entry.page_count} עמודים. האם מדובר בכמה קבלות נפרדות,
+            או בקבלה אחת שמשתרעת על פני כמה עמודים?
+          </p>
+          <div className="chat-review-actions">
+            <button className="secondary" onClick={() => onResolvePages(false)} disabled={busy}>
+              {busy ? 'מעבד…' : 'קבלה אחת'}
+            </button>
+            <button onClick={() => onResolvePages(true)} disabled={busy}>
+              {busy ? 'מעבד…' : `${entry.page_count} קבלות נפרדות`}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (entry.status === 'error') {
     return (
       <div className="chat-bubble assistant error">
         <div className="card chat-review-card">
-          <img src={entry.image} alt="קבלה" className="chat-thumb" />
+          <Thumbnail src={entry.image} />
           <p className="error">{entry.error_message}</p>
           <button className="secondary" onClick={onRetry} disabled={busy}>
             {busy ? 'מנסה…' : 'נסה שוב'}
@@ -222,7 +288,7 @@ function ChatEntry({
     return (
       <div className="chat-bubble assistant">
         <div className="card chat-review-card">
-          <img src={entry.image} alt="קבלה" className="chat-thumb" />
+          <Thumbnail src={entry.image} />
           <p className="success">
             ✓ נשמר עבור {receipt.client_name} — {receipt.category_display} — ₪
             {Number(receipt.amount).toFixed(2)}
@@ -236,7 +302,7 @@ function ChatEntry({
     return (
       <div className="chat-bubble assistant">
         <div className="card chat-review-card">
-          <img src={entry.image} alt="קבלה" className="chat-thumb" />
+          <Thumbnail src={entry.image} />
           <p className="hint">בוטל.</p>
         </div>
       </div>
@@ -250,7 +316,7 @@ function ChatEntry({
   return (
     <div className="chat-bubble assistant">
       <div className="card chat-review-card">
-        <img src={entry.image} alt="קבלה" className="chat-thumb" />
+        <Thumbnail src={entry.image} />
 
         <label>
           לקוח

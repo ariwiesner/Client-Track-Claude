@@ -160,7 +160,8 @@ class Receipt(models.Model):
         max_length=20, choices=CATEGORY_CHOICES, default=CATEGORY_OTHER, verbose_name='קטגוריה'
     )
     receipt_date = models.DateField(verbose_name='תאריך הקבלה')
-    image = models.ImageField(upload_to='receipts/%Y/%m/', verbose_name='תמונת הקבלה')
+    # FileField, not ImageField: a receipt may be a photo or a PDF.
+    image = models.FileField(upload_to='receipts/%Y/%m/', verbose_name='תמונת הקבלה')
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='receipts'
     )
@@ -184,20 +185,27 @@ class ReceiptChatUpload(models.Model):
     STATUS_APPROVED = 'approved'
     STATUS_DISCARDED = 'discarded'
     STATUS_ERROR = 'error'
+    STATUS_AWAITING_PAGE_CHOICE = 'awaiting_page_choice'
     STATUS_CHOICES = [
         (STATUS_PENDING, 'ממתין'),
         (STATUS_APPROVED, 'אושר'),
         (STATUS_DISCARDED, 'בוטל'),
         (STATUS_ERROR, 'שגיאה'),
+        (STATUS_AWAITING_PAGE_CHOICE, 'ממתין לבחירת עמודים'),
     ]
 
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='receipt_chat_uploads'
     )
-    image = models.ImageField(upload_to='receipt_chat/%Y/%m/')
-    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default=STATUS_PENDING)
+    # FileField, not ImageField: a receipt may be a photo or a PDF.
+    image = models.FileField(upload_to='receipt_chat/%Y/%m/')
+    status = models.CharField(max_length=25, choices=STATUS_CHOICES, default=STATUS_PENDING)
     extraction = models.JSONField(default=dict, blank=True)
     error_message = models.CharField(max_length=500, blank=True)
+    # Only set for a multi-page PDF sitting in STATUS_AWAITING_PAGE_CHOICE —
+    # how many pages it has, so the frontend can ask "is this N separate
+    # receipts, or one?" without re-opening the file itself.
+    page_count = models.PositiveIntegerField(null=True, blank=True)
     receipt = models.ForeignKey(
         Receipt, on_delete=models.SET_NULL, null=True, blank=True, related_name='chat_uploads'
     )

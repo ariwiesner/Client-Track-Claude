@@ -104,4 +104,6 @@ export const api = {
     request(`/receipt-chat/${id}/approve/`, { method: 'POST', body: fields }),
   discardReceiptChat: (id) => request(`/receipt-chat/${id}/discard/`, { method: 'POST' }),
   retryReceiptChat: (id) => request(`/receipt-chat/${id}/retry/`, { method: 'POST' }),
+  resolveReceiptChatPages: (id, split) =>
+    request(`/receipt-chat/${id}/resolve-pages/`, { method: 'POST', body: { split } }),
 };

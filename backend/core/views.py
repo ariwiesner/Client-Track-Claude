@@ -366,8 +366,39 @@ class ReceiptChatViewSet(viewsets.ModelViewSet):
         if not image:
             return Response({'detail': 'image is required'}, status=status.HTTP_400_BAD_REQUEST)
 
+        file_bytes = image.read()
+        image.seek(0)
+
+        if not receipt_llm.is_pdf_bytes(file_bytes):
+            return self._create_from_extraction(request, image, lambda: receipt_llm.extract_receipt(image))
+
         try:
-            extraction = receipt_llm.extract_receipt(image)
+            page_count = receipt_llm.count_pdf_pages(file_bytes)
+        except Exception:  # noqa: BLE001 — any PDF parsing failure is just a bad file
+            return Response({'detail': 'קובץ ה-PDF פגום או לא נתמך'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if page_count > 1:
+            # Don't extract yet — could be several separate receipts bundled
+            # into one file (e.g. a multi-visit statement) rather than one
+            # receipt spanning multiple pages. Ask the worker first; see
+            # resolve_pages for what happens with their answer.
+            upload = ReceiptChatUpload.objects.create(
+                created_by=request.user, image=image,
+                status=ReceiptChatUpload.STATUS_AWAITING_PAGE_CHOICE,
+                page_count=page_count,
+            )
+            return Response(self.get_serializer(upload).data, status=status.HTTP_201_CREATED)
+
+        # Single-page PDF: exactly like a normal one-receipt upload, just
+        # read via the PDF path (Gemini reads PDFs natively) instead of the
+        # photo-preprocessing one.
+        return self._create_from_extraction(
+            request, image, lambda: receipt_llm.extract_receipt_from_pdf(file_bytes)
+        )
+
+    def _create_from_extraction(self, request, image, extract_fn):
+        try:
+            extraction = extract_fn()
             upload_status = ReceiptChatUpload.STATUS_PENDING
             error_message = ''
         except receipt_llm.ExtractionError as exc:
@@ -380,8 +411,59 @@ class ReceiptChatViewSet(viewsets.ModelViewSet):
             created_by=request.user, image=image, status=upload_status,
             extraction=extraction, error_message=error_message,
         )
-        serializer = self.get_serializer(upload)
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(self.get_serializer(upload).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['post'], url_path='resolve-pages')
+    def resolve_pages(self, request, pk=None):
+        upload = self.get_object()
+        if upload.status != ReceiptChatUpload.STATUS_AWAITING_PAGE_CHOICE:
+            return Response({'detail': 'קובץ זה כבר טופל'}, status=status.HTTP_400_BAD_REQUEST)
+
+        split = str(request.data.get('split', '')).lower() in ('1', 'true', 'yes')
+
+        upload.image.open('rb')
+        pdf_bytes = upload.image.read()
+        upload.image.close()
+
+        if not split:
+            # One receipt spanning multiple pages — extract from the whole
+            # PDF at once so fields split across pages (e.g. items on page
+            # 1, total/signature on page 2) are all visible together.
+            try:
+                upload.extraction = receipt_llm.extract_receipt_from_pdf(pdf_bytes)
+                upload.status = ReceiptChatUpload.STATUS_PENDING
+                upload.error_message = ''
+            except receipt_llm.ExtractionError as exc:
+                upload.status = ReceiptChatUpload.STATUS_ERROR
+                upload.error_message = str(exc)
+            upload.page_count = None
+            upload.save(update_fields=['status', 'extraction', 'error_message', 'page_count'])
+            return Response({'entries': [self.get_serializer(upload).data]})
+
+        # Several separate receipts: rasterize each page and run it through
+        # the normal single-receipt pipeline as its own chat entry.
+        created = []
+        for page_index in range(upload.page_count or 0):
+            page_png = receipt_llm.render_pdf_page_to_png(pdf_bytes, page_index)
+            page_file = ContentFile(page_png, name=f'page-{page_index + 1}.png')
+            try:
+                extraction = receipt_llm.extract_receipt(page_file)
+                page_status = ReceiptChatUpload.STATUS_PENDING
+                error_message = ''
+            except receipt_llm.ExtractionError as exc:
+                extraction = {}
+                page_status = ReceiptChatUpload.STATUS_ERROR
+                error_message = str(exc)
+            page_file.seek(0)
+            created.append(ReceiptChatUpload.objects.create(
+                created_by=request.user, image=page_file, status=page_status,
+                extraction=extraction, error_message=error_message,
+            ))
+
+        upload.image.delete(save=False)
+        upload.delete()
+
+        return Response({'entries': self.get_serializer(created, many=True).data})
 
     @action(detail=True, methods=['post'])
     def approve(self, request, pk=None):
