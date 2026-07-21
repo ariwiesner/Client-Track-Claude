@@ -14,18 +14,23 @@ from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 
-from core.models import Client, MonthlyBilling, Receipt, ReceiptChatUpload, TimeEntry, TrackedSystem
+from core.models import (
+    Client, MonthlyBilling, Notification, PushSubscription, Receipt, ReceiptChatUpload, TimeEntry,
+    TrackedSystem,
+)
+from core.permissions import IsSuperUser
 from core.serializers import (
     ClientSerializer,
     CreateWorkerSerializer,
     MonthlyBillingSerializer,
+    NotificationSerializer,
     ReceiptChatUploadSerializer,
     ReceiptSerializer,
     TimeEntrySerializer,
     TrackedSystemSerializer,
     UserSerializer,
 )
-from core.services import billing, receipt_llm
+from core.services import billing, notifications, receipt_llm
 
 RECEIPT_CHAT_RETENTION_DAYS = 7
 
@@ -39,13 +44,40 @@ def login_view(request):
     if user is None:
         return Response({'detail': 'Invalid credentials'}, status=status.HTTP_400_BAD_REQUEST)
     token, _ = Token.objects.get_or_create(user=user)
+    notifications.notify_login(user)
     return Response({'token': token.key, 'user': UserSerializer(user).data})
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def logout_view(request):
+    # Deliberately does NOT delete the auth token: TokenAuthentication gives
+    # each user exactly one token shared across the web dashboard and the
+    # desktop helper app (see helper/auth.py) — deleting it here would force
+    # a random worker's helper into a surprise re-login. This endpoint only
+    # exists to record the notification.
+    notifications.notify_logout(request.user)
+    return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def me_view(request):
     return Response(UserSerializer(request.user).data)
+
+
+@api_view(['POST'])
+@permission_classes([IsSuperUser])
+def push_subscribe_view(request):
+    endpoint = request.data.get('endpoint')
+    keys = request.data.get('keys') or {}
+    p256dh, auth = keys.get('p256dh'), keys.get('auth')
+    if not endpoint or not p256dh or not auth:
+        return Response({'detail': 'Invalid subscription'}, status=status.HTTP_400_BAD_REQUEST)
+    PushSubscription.objects.update_or_create(
+        endpoint=endpoint, defaults={'user': request.user, 'p256dh': p256dh, 'auth': auth},
+    )
+    return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 @api_view(['POST'])
@@ -226,6 +258,7 @@ class TimeEntryViewSet(viewsets.ModelViewSet):
             status=TimeEntry.STATUS_RUNNING,
             system_id=system_id,
         )
+        notifications.notify_sign_in(entry)
         return Response(TimeEntrySerializer(entry).data, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=['post'])
@@ -237,6 +270,7 @@ class TimeEntryViewSet(viewsets.ModelViewSet):
         entry.status = TimeEntry.STATUS_STOPPED
         entry.save(update_fields=['end_time', 'status', 'updated_at'])
         billing.get_or_refresh_billing(entry.client, entry.start_time.year, entry.start_time.month)
+        notifications.notify_sign_out(entry)
         return Response(TimeEntrySerializer(entry).data)
 
     @action(detail=True, methods=['post'])
@@ -292,6 +326,7 @@ class TimeEntryViewSet(viewsets.ModelViewSet):
             status=TimeEntry.STATUS_STOPPED,
         )
         billing.get_or_refresh_billing(client, start.year, start.month)
+        notifications.notify_hours_added(entry)
         return Response(TimeEntrySerializer(entry).data, status=status.HTTP_201_CREATED)
 
 
@@ -314,8 +349,30 @@ class MonthlyBillingViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=True, methods=['post'], url_path='toggle-paid')
     def toggle_paid(self, request, pk=None):
         row = self.get_object()
-        row = billing.toggle_paid(row)
+        row = billing.toggle_paid(row, actor=request.user)
         return Response(MonthlyBillingSerializer(row).data)
+
+
+class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
+    """Superuser-only activity feed: the latest notifications.panel_size
+    rows, no pagination. mark-read clears exactly that same window,
+    recomputed server-side rather than trusting client-supplied ids.
+    """
+    http_method_names = ['get', 'post']
+    permission_classes = [IsSuperUser]
+    serializer_class = NotificationSerializer
+
+    def get_queryset(self):
+        return Notification.objects.all()[:notifications.PANEL_SIZE]
+
+    @action(detail=False, methods=['post'], url_path='mark-read')
+    def mark_read(self, request):
+        ids = list(
+            Notification.objects.order_by('-created_at')
+            .values_list('id', flat=True)[:notifications.PANEL_SIZE]
+        )
+        Notification.objects.filter(id__in=ids, is_read=False).update(is_read=True)
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class ReceiptViewSet(viewsets.ModelViewSet):
@@ -519,6 +576,7 @@ class ReceiptChatViewSet(viewsets.ModelViewSet):
         receipt.image.save(os.path.basename(upload.image.name), ContentFile(upload.image.read()), save=False)
         upload.image.close()
         receipt.save()
+        notifications.notify_receipt_added(receipt)
 
         upload.status = ReceiptChatUpload.STATUS_APPROVED
         upload.receipt = receipt

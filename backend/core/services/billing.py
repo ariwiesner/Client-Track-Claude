@@ -4,6 +4,7 @@ from django.db.models import Sum, F, ExpressionWrapper, DurationField
 from django.utils import timezone
 
 from core.models import Client, MonthlyBilling, TimeEntry
+from core.services import notifications
 
 
 def compute_hours_for_month(client: Client, year: int, month: int) -> Decimal:
@@ -100,7 +101,7 @@ def get_or_refresh_billing(client: Client, year: int, month: int) -> MonthlyBill
     return billing
 
 
-def toggle_paid(billing: MonthlyBilling) -> MonthlyBilling:
+def toggle_paid(billing: MonthlyBilling, actor=None) -> MonthlyBilling:
     billing.paid = not billing.paid
     billing.paid_at = timezone.now() if billing.paid else None
     # Refresh the snapshot either way: freezes current figures when locking,
@@ -110,6 +111,7 @@ def toggle_paid(billing: MonthlyBilling) -> MonthlyBilling:
     billing.total_hours = hours
     billing.amount_owed = hours * billing.client.hourly_rate
     billing.save()
+    notifications.notify_billing_toggled(billing, actor=actor)
     return billing
 
 

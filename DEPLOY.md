@@ -45,10 +45,27 @@ python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 
+# One-time: generate a VAPID keypair for push notifications.
+vapid --gen                      # writes private_key.pem / public_key.pem to cwd
+vapid --applicationServerKey     # copy this into frontend's VITE_VAPID_PUBLIC_KEY (see step 5)
+
+# VAPID_PRIVATE_KEY needs the raw key, not the .pem file — convert it:
+python -c "
+import base64
+from cryptography.hazmat.primitives import serialization
+with open('private_key.pem', 'rb') as f:
+    priv = serialization.load_pem_private_key(f.read(), password=None)
+raw = priv.private_numbers().private_value.to_bytes(32, 'big')
+print(base64.urlsafe_b64encode(raw).rstrip(b'=').decode())
+"
+rm private_key.pem public_key.pem   # no longer needed once copied into .env
+
 cp .env.example .env
 nano .env   # set DJANGO_SECRET_KEY (any long random string),
             # DJANGO_ALLOWED_HOSTS=tracker.yourdomain.com,
-            # DJANGO_CORS_ORIGINS=https://tracker.yourdomain.com
+            # DJANGO_CORS_ORIGINS=https://tracker.yourdomain.com,
+            # VAPID_PRIVATE_KEY (the raw key string printed above),
+            # VAPID_CLAIMS_EMAIL=you@example.com
 
 python manage.py migrate
 python manage.py createsuperuser   # your admin login for /admin/
@@ -73,7 +90,9 @@ pointing at the real domain:
 ```bash
 cd frontend
 # .env.production already has VITE_API_URL=https://tracker.example.com/api —
-# edit it to your real domain first.
+# edit it to your real domain first. Also set VITE_VAPID_PUBLIC_KEY to the
+# applicationServerKey printed in step 4 (baked into the bundle at build
+# time, not fetched at runtime).
 npm install
 npm run build
 ```
