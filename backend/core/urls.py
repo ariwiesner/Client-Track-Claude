@@ -4,6 +4,7 @@ from django.urls import path
 
 from core.views import (
     ClientViewSet,
+    MeetingViewSet,
     MonthlyBillingViewSet,
     NotificationViewSet,
     ReceiptChatViewSet,
@@ -28,6 +29,7 @@ router.register('workers', WorkerViewSet, basename='worker')
 router.register('receipts', ReceiptViewSet, basename='receipt')
 router.register('receipt-chat', ReceiptChatViewSet, basename='receiptchatupload')
 router.register('notifications', NotificationViewSet, basename='notification')
+router.register('meetings', MeetingViewSet, basename='meeting')
 
 urlpatterns = [
     path('auth/login/', login_view, name='login'),

@@ -10,6 +10,7 @@ import { WorkersPage } from './pages/WorkersPage';
 import { WorkerDetailPage } from './pages/WorkerDetailPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { ReceiptChatPage } from './pages/ReceiptChatPage';
+import { CalendarPage } from './pages/CalendarPage';
 import { AuthGuard } from './components/AuthGuard';
 import { AppLayout } from './components/AppLayout';
 import { FloatingTimerWidget } from './components/FloatingTimerWidget';
@@ -41,6 +42,7 @@ function App() {
           <Route path="/workers/:id" element={<WorkerDetailPage />} />
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/receipts" element={<ReceiptChatPage />} />
+          <Route path="/calendar" element={<CalendarPage />} />
         </Route>
       </Routes>
 

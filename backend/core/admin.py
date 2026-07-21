@@ -1,8 +1,8 @@
 from django.contrib import admin
 
 from core.models import (
-    Client, MonthlyBilling, Notification, PushSubscription, Receipt, ReceiptChatUpload, TimeEntry,
-    TrackedSystem,
+    Client, Meeting, MonthlyBilling, Notification, PushSubscription, Receipt, ReceiptChatUpload,
+    TimeEntry, TrackedSystem,
 )
 
 
@@ -55,3 +55,10 @@ class PushSubscriptionAdmin(admin.ModelAdmin):
     list_display = ['user', 'endpoint', 'created_at']
     list_filter = ['user']
     date_hierarchy = 'created_at'
+
+
+@admin.register(Meeting)
+class MeetingAdmin(admin.ModelAdmin):
+    list_display = ['title', 'start_time', 'reminder_minutes_before', 'reminder_sent', 'created_by']
+    list_filter = ['reminder_sent']
+    date_hierarchy = 'start_time'

@@ -1,5 +1,7 @@
 import threading
 
+from django.utils import timezone
+
 from core.models import Notification, TimeEntry
 from core.services import push
 
@@ -82,4 +84,13 @@ def notify_billing_toggled(billing, actor=None):
         f'החיוב של {billing.client.name} עבור {billing.month:02d}/{billing.year} '
         f'סומן כ{status_label}',
         actor=actor,
+    )
+
+
+def notify_meeting_reminder(meeting):
+    when = timezone.localtime(meeting.start_time).strftime('%H:%M')
+    create_notification(
+        Notification.CATEGORY_MEETING_REMINDER,
+        f'תזכורת: פגישה "{meeting.title}" בשעה {when}',
+        actor=meeting.created_by,
     )

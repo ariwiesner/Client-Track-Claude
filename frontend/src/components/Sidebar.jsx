@@ -54,6 +54,14 @@ function ReceiptIcon() {
     </svg>
   );
 }
+function CalendarIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+      <rect x="3.5" y="5" width="17" height="15" rx="1.8" />
+      <path d="M3.5 9.5h17M8 3v3.5M16 3v3.5" strokeLinecap="round" />
+    </svg>
+  );
+}
 function LogoutIcon() {
   return (
     <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
@@ -69,6 +77,7 @@ const NAV_ITEMS = [
   { to: '/systems', label: 'מערכות', Icon: LayersIcon },
   { to: '/manual-entry', label: 'רישום שעות', Icon: ClockIcon },
   { to: '/receipts', label: 'קבלות', Icon: ReceiptIcon },
+  { to: '/calendar', label: 'יומן', Icon: CalendarIcon },
 ];
 
 export function Sidebar() {

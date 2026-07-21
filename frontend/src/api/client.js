@@ -111,4 +111,9 @@ export const api = {
   listNotifications: () => request('/notifications/'),
   markNotificationsRead: () => request('/notifications/mark-read/', { method: 'POST' }),
   subscribePush: (subscription) => request('/push/subscribe/', { method: 'POST', body: subscription }),
+
+  listMeetings: (start, end) => request(`/meetings/?start=${start}&end=${end}`),
+  createMeeting: (data) => request('/meetings/', { method: 'POST', body: data }),
+  updateMeeting: (id, data) => request(`/meetings/${id}/`, { method: 'PATCH', body: data }),
+  deleteMeeting: (id) => request(`/meetings/${id}/`, { method: 'DELETE' }),
 };
