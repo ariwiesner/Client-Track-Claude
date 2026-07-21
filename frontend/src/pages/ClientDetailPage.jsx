@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { api } from '../api/client';
-import { groupHoursBySystem } from '../utils/breakdown';
+import { groupHoursBySystem, groupReceiptsByCategory } from '../utils/breakdown';
 
 function whatsAppLink(phone) {
   if (!phone) return null;
@@ -40,6 +40,7 @@ export function ClientDetailPage() {
   const [client, setClient] = useState(null);
   const [billing, setBilling] = useState(null);
   const [entries, setEntries] = useState([]);
+  const [receipts, setReceipts] = useState([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
 
@@ -75,14 +76,16 @@ export function ClientDetailPage() {
 
   const load = useCallback(async () => {
     try {
-      const [clientData, billingRows, entriesData] = await Promise.all([
+      const [clientData, billingRows, entriesData, receiptsData] = await Promise.all([
         api.getClient(id),
         api.listBilling(viewYear, viewMonth + 1, id),
         api.listTimeEntriesForClient(id),
+        api.listReceipts(id, viewYear, viewMonth + 1),
       ]);
       setClient(clientData);
       setBilling(billingRows.find((row) => String(row.client.id) === String(id)) || null);
       setEntries(entriesData);
+      setReceipts(receiptsData);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -97,6 +100,12 @@ export function ClientDetailPage() {
   const breakdown = useMemo(() => {
     return groupHoursBySystem(entries, viewYear, viewMonth);
   }, [entries, viewYear, viewMonth]);
+
+  const receiptGroups = useMemo(() => groupReceiptsByCategory(receipts), [receipts]);
+  const receiptsTotal = useMemo(
+    () => receipts.reduce((sum, r) => sum + Number(r.amount), 0),
+    [receipts]
+  );
 
   async function handleTogglePaid() {
     if (!billing) return;
@@ -263,6 +272,48 @@ export function ClientDetailPage() {
               ))}
             </ul>
           </div>
+        )}
+      </section>
+
+      <section className="card">
+        <h2>קבלות</h2>
+
+        {receipts.length > 0 && (
+          <div className="stat-bar">
+            <div className="stat-bar-stats">
+              <div className="stat-tile">
+                <span className="stat-label">מספר קבלות</span>
+                <span className="stat-value mono">{receipts.length}</span>
+              </div>
+              <div className="stat-tile">
+                <span className="stat-label">סה"כ סכום</span>
+                <span className="stat-value mono">₪{receiptsTotal.toFixed(2)}</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {receiptGroups.length > 0 ? (
+          receiptGroups.map(([label, group, total]) => (
+            <div className="breakdown" key={label}>
+              <h3 className="breakdown-title">
+                {label} — ₪{total.toFixed(2)}
+              </h3>
+              <ul className="breakdown-list">
+                {group.map((receipt) => (
+                  <li key={receipt.id}>
+                    <a href={receipt.image} target="_blank" rel="noopener noreferrer">
+                      {new Date(receipt.receipt_date).toLocaleDateString('he-IL')}
+                      {receipt.receipt_number ? ` · ${receipt.receipt_number}` : ''}
+                    </a>
+                    <span>₪{Number(receipt.amount).toFixed(2)}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))
+        ) : (
+          <p className="hint">אין קבלות לחודש זה.</p>
         )}
       </section>
 

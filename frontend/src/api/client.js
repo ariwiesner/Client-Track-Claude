@@ -4,6 +4,28 @@ function getToken() {
   return localStorage.getItem('token');
 }
 
+async function handleResponse(res) {
+  if (res.status === 204) return null;
+
+  if (!res.ok) {
+    let detail = `Request failed (${res.status})`;
+    let data = null;
+    try {
+      data = await res.json();
+      detail = data.detail || JSON.stringify(data);
+    } catch {
+      // ignore parse errors, use default detail
+    }
+    const err = new Error(detail);
+    err.status = res.status;
+    err.data = data;
+    throw err;
+  }
+
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
+}
+
 async function request(path, { method = 'GET', body } = {}) {
   const headers = { 'Content-Type': 'application/json' };
   const token = getToken();
@@ -15,21 +37,19 @@ async function request(path, { method = 'GET', body } = {}) {
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
 
-  if (res.status === 204) return null;
+  return handleResponse(res);
+}
 
-  if (!res.ok) {
-    let detail = `Request failed (${res.status})`;
-    try {
-      const data = await res.json();
-      detail = data.detail || JSON.stringify(data);
-    } catch {
-      // ignore parse errors, use default detail
-    }
-    throw new Error(detail);
-  }
+// For file uploads: no Content-Type header (the browser sets the multipart
+// boundary itself) and no JSON.stringify — `formData` is sent as-is.
+async function requestForm(path, formData, { method = 'POST' } = {}) {
+  const headers = {};
+  const token = getToken();
+  if (token) headers['Authorization'] = `Token ${token}`;
 
-  const text = await res.text();
-  return text ? JSON.parse(text) : null;
+  const res = await fetch(`${API_URL}${path}`, { method, headers, body: formData });
+
+  return handleResponse(res);
 }
 
 export const api = {
@@ -70,4 +90,20 @@ export const api = {
 
   getMySummary: (year, month) => request(`/me/summary/?year=${year}&month=${month}`),
   changePassword: (data) => request('/auth/change-password/', { method: 'POST', body: data }),
+
+  listReceipts: (clientId, year, month) =>
+    request(`/receipts/?client=${clientId}&year=${year}&month=${month}`),
+
+  listReceiptChat: () => request('/receipt-chat/'),
+  uploadReceiptChat: (imageFile) => {
+    const fd = new FormData();
+    fd.append('image', imageFile);
+    return requestForm('/receipt-chat/', fd);
+  },
+  approveReceiptChat: (id, fields) =>
+    request(`/receipt-chat/${id}/approve/`, { method: 'POST', body: fields }),
+  discardReceiptChat: (id) => request(`/receipt-chat/${id}/discard/`, { method: 'POST' }),
+  retryReceiptChat: (id) => request(`/receipt-chat/${id}/retry/`, { method: 'POST' }),
+  resolveReceiptChatPages: (id, split) =>
+    request(`/receipt-chat/${id}/resolve-pages/`, { method: 'POST', body: { split } }),
 };

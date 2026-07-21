@@ -137,3 +137,83 @@ class MonthlyBilling(models.Model):
 
     def __str__(self):
         return f"{self.client} — {self.year}-{self.month:02d}"
+
+
+class Receipt(models.Model):
+    CATEGORY_FOOD = 'food'
+    CATEGORY_OFFICE_SUPPLIES = 'office_supplies'
+    CATEGORY_TRAVEL = 'travel'
+    CATEGORY_BUSINESS = 'business'
+    CATEGORY_OTHER = 'other'
+    CATEGORY_CHOICES = [
+        (CATEGORY_FOOD, 'מזון'),
+        (CATEGORY_OFFICE_SUPPLIES, 'ציוד משרדי'),
+        (CATEGORY_TRAVEL, 'נסיעות'),
+        (CATEGORY_BUSINESS, 'עבור העסק'),
+        (CATEGORY_OTHER, 'אחר'),
+    ]
+
+    client = models.ForeignKey(Client, on_delete=models.CASCADE, related_name='receipts')
+    amount = models.DecimalField(max_digits=10, decimal_places=2, verbose_name='סכום')
+    receipt_number = models.CharField(max_length=100, blank=True, verbose_name='מספר קבלה')
+    category = models.CharField(
+        max_length=20, choices=CATEGORY_CHOICES, default=CATEGORY_OTHER, verbose_name='קטגוריה'
+    )
+    receipt_date = models.DateField(verbose_name='תאריך הקבלה')
+    # FileField, not ImageField: a receipt may be a photo or a PDF.
+    image = models.FileField(upload_to='receipts/%Y/%m/', verbose_name='תמונת הקבלה')
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='receipts'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-receipt_date', '-created_at']
+        verbose_name_plural = 'Receipts'
+
+    def __str__(self):
+        return f"{self.client} — {self.receipt_date} — ₪{self.amount}"
+
+
+class ReceiptChatUpload(models.Model):
+    """One turn in a worker's receipt-chat: the uploaded photo plus what the
+    LLM extracted from it. Kept (unlike Receipt) even before/without
+    approval, so the chat has something to show when the worker navigates
+    back — see ReceiptChatViewSet's lazy 7-day cleanup for retention.
+    """
+    STATUS_PENDING = 'pending'
+    STATUS_APPROVED = 'approved'
+    STATUS_DISCARDED = 'discarded'
+    STATUS_ERROR = 'error'
+    STATUS_AWAITING_PAGE_CHOICE = 'awaiting_page_choice'
+    STATUS_CHOICES = [
+        (STATUS_PENDING, 'ממתין'),
+        (STATUS_APPROVED, 'אושר'),
+        (STATUS_DISCARDED, 'בוטל'),
+        (STATUS_ERROR, 'שגיאה'),
+        (STATUS_AWAITING_PAGE_CHOICE, 'ממתין לבחירת עמודים'),
+    ]
+
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='receipt_chat_uploads'
+    )
+    # FileField, not ImageField: a receipt may be a photo or a PDF.
+    image = models.FileField(upload_to='receipt_chat/%Y/%m/')
+    status = models.CharField(max_length=25, choices=STATUS_CHOICES, default=STATUS_PENDING)
+    extraction = models.JSONField(default=dict, blank=True)
+    error_message = models.CharField(max_length=500, blank=True)
+    # Only set for a multi-page PDF sitting in STATUS_AWAITING_PAGE_CHOICE —
+    # how many pages it has, so the frontend can ask "is this N separate
+    # receipts, or one?" without re-opening the file itself.
+    page_count = models.PositiveIntegerField(null=True, blank=True)
+    receipt = models.ForeignKey(
+        Receipt, on_delete=models.SET_NULL, null=True, blank=True, related_name='chat_uploads'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['created_at']
+        verbose_name_plural = 'Receipt chat uploads'
+
+    def __str__(self):
+        return f"{self.created_by} — {self.status} — {self.created_at:%Y-%m-%d %H:%M}"

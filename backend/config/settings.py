@@ -13,8 +13,15 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 import os
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Local dev convenience: real deployments set env vars directly (see
+# deploy/client-tracker-backend.service's EnvironmentFile) and don't need
+# this — load_dotenv() is a no-op if backend/.env doesn't exist.
+load_dotenv(BASE_DIR / '.env')
 
 
 # Quick-start development settings - unsuitable for production
@@ -143,6 +150,15 @@ TIME_ZONE = 'Asia/Jerusalem'
 USE_I18N = True
 
 USE_TZ = True
+
+
+# Uploaded receipt photos (dev-only serving is wired up in config/urls.py —
+# production needs a reverse-proxy /media/* block, see deploy/Caddyfile).
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
+
+# Real secret — no insecure dev fallback like DJANGO_SECRET_KEY has.
+GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
 
 
 # Static files (CSS, JavaScript, Images)
