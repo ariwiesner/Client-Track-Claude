@@ -217,3 +217,61 @@ class ReceiptChatUpload(models.Model):
 
     def __str__(self):
         return f"{self.created_by} — {self.status} — {self.created_at:%Y-%m-%d %H:%M}"
+
+
+class Notification(models.Model):
+    """Superuser-only activity feed. Messages are stored pre-rendered in
+    Hebrew at creation time — this app has no i18n layer, so the frontend
+    is a pure list-renderer, matching every other user-facing string here.
+    """
+    CATEGORY_SIGN_IN = 'sign_in'
+    CATEGORY_SIGN_OUT = 'sign_out'
+    CATEGORY_HOURS = 'hours'
+    CATEGORY_RECEIPT = 'receipt'
+    CATEGORY_BILLING = 'billing'
+    CATEGORY_LOGIN = 'login'
+    CATEGORY_LOGOUT = 'logout'
+    CATEGORY_CHOICES = [
+        (CATEGORY_SIGN_IN, 'כניסה לשעון'),
+        (CATEGORY_SIGN_OUT, 'יציאה משעון'),
+        (CATEGORY_HOURS, 'שעות'),
+        (CATEGORY_RECEIPT, 'קבלה'),
+        (CATEGORY_BILLING, 'חיוב'),
+        (CATEGORY_LOGIN, 'התחברות'),
+        (CATEGORY_LOGOUT, 'התנתקות'),
+    ]
+
+    category = models.CharField(max_length=20, choices=CATEGORY_CHOICES)
+    message = models.CharField(max_length=500)
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='+'
+    )
+    is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name_plural = 'Notifications'
+
+    def __str__(self):
+        return f"{self.category} — {self.created_at:%Y-%m-%d %H:%M} — {self.message[:40]}"
+
+
+class PushSubscription(models.Model):
+    """A single browser/device's Web Push registration. endpoint (not user)
+    is the unique key since one person has multiple devices.
+    """
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='push_subscriptions'
+    )
+    endpoint = models.URLField(max_length=500, unique=True)
+    p256dh = models.CharField(max_length=255)
+    auth = models.CharField(max_length=255)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name_plural = 'Push subscriptions'
+
+    def __str__(self):
+        return f"{self.user} — {self.endpoint[:60]}"

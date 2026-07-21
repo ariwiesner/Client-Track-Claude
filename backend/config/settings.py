@@ -160,6 +160,10 @@ MEDIA_ROOT = BASE_DIR / 'media'
 # Real secret — no insecure dev fallback like DJANGO_SECRET_KEY has.
 GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
 
+# Real secret — no insecure dev fallback like DJANGO_SECRET_KEY has.
+VAPID_PRIVATE_KEY = os.environ.get('VAPID_PRIVATE_KEY')
+VAPID_CLAIMS_EMAIL = os.environ.get('VAPID_CLAIMS_EMAIL')
+
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/

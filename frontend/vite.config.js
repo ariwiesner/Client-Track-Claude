@@ -12,12 +12,18 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      devOptions: { enabled: true },
+      // injectManifest (a hand-written service worker at src/sw.js) instead
+      // of generateSW — needed to add the push/notificationclick listeners,
+      // which generateSW has no way to inject.
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'sw.js',
       // Only precache the app shell — there's no meaningful offline mode
       // since this tool is useless without the LAN server.
-      workbox: {
+      injectManifest: {
         globPatterns: ['**/*.{js,css,html}'],
       },
+      devOptions: { enabled: true, type: 'module' },
       manifest: {
         name: 'מעקב לקוחות',
         short_name: 'מעקב לקוחות',

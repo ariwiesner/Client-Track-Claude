@@ -1,13 +1,15 @@
 from django.contrib.auth.models import User
 from rest_framework import serializers
 
-from core.models import Client, MonthlyBilling, Receipt, ReceiptChatUpload, TimeEntry, TrackedSystem
+from core.models import (
+    Client, MonthlyBilling, Notification, Receipt, ReceiptChatUpload, TimeEntry, TrackedSystem,
+)
 
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ['id', 'username', 'first_name', 'last_name', 'is_staff', 'is_active']
+        fields = ['id', 'username', 'first_name', 'last_name', 'is_staff', 'is_superuser', 'is_active']
 
 
 class CreateWorkerSerializer(serializers.ModelSerializer):
@@ -118,4 +120,11 @@ class ReceiptChatUploadSerializer(serializers.ModelSerializer):
             'id', 'image', 'status', 'extraction', 'error_message', 'receipt',
             'page_count', 'created_at',
         ]
+        read_only_fields = fields
+
+
+class NotificationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Notification
+        fields = ['id', 'category', 'message', 'is_read', 'created_at']
         read_only_fields = fields

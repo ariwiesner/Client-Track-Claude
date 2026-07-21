@@ -55,6 +55,7 @@ async function requestForm(path, formData, { method = 'POST' } = {}) {
 export const api = {
   login: (username, password) =>
     request('/auth/login/', { method: 'POST', body: { username, password } }),
+  logout: () => request('/auth/logout/', { method: 'POST' }),
   me: () => request('/auth/me/'),
 
   listClients: () => request('/clients/'),
@@ -106,4 +107,8 @@ export const api = {
   retryReceiptChat: (id) => request(`/receipt-chat/${id}/retry/`, { method: 'POST' }),
   resolveReceiptChatPages: (id, split) =>
     request(`/receipt-chat/${id}/resolve-pages/`, { method: 'POST', body: { split } }),
+
+  listNotifications: () => request('/notifications/'),
+  markNotificationsRead: () => request('/notifications/mark-read/', { method: 'POST' }),
+  subscribePush: (subscription) => request('/push/subscribe/', { method: 'POST', body: subscription }),
 };

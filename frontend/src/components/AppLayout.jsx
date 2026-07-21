@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
 import { useAuth } from '../context/AuthContext';
+import { NotificationBell } from './NotificationBell';
 import { Sidebar } from './Sidebar';
 
 const STATIC_TITLES = {
@@ -75,6 +76,7 @@ export function AppLayout() {
             {title && <span className="page-title">{title}</span>}
           </div>
           <div className="app-header-right">
+            <NotificationBell />
             <span className="user-identity">
               <span className="user-name">
                 {greeting()}, {user?.first_name || user?.username}!

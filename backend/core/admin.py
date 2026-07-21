@@ -1,6 +1,9 @@
 from django.contrib import admin
 
-from core.models import Client, MonthlyBilling, Receipt, ReceiptChatUpload, TimeEntry, TrackedSystem
+from core.models import (
+    Client, MonthlyBilling, Notification, PushSubscription, Receipt, ReceiptChatUpload, TimeEntry,
+    TrackedSystem,
+)
 
 
 @admin.register(Client)
@@ -38,3 +41,17 @@ class ReceiptAdmin(admin.ModelAdmin):
 class ReceiptChatUploadAdmin(admin.ModelAdmin):
     list_display = ['created_by', 'status', 'receipt', 'created_at']
     list_filter = ['status', 'created_by']
+
+
+@admin.register(Notification)
+class NotificationAdmin(admin.ModelAdmin):
+    list_display = ['category', 'message', 'actor', 'is_read', 'created_at']
+    list_filter = ['category', 'is_read']
+    date_hierarchy = 'created_at'
+
+
+@admin.register(PushSubscription)
+class PushSubscriptionAdmin(admin.ModelAdmin):
+    list_display = ['user', 'endpoint', 'created_at']
+    list_filter = ['user']
+    date_hierarchy = 'created_at'
