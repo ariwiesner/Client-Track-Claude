@@ -3,7 +3,7 @@ import json
 from decimal import Decimal, InvalidOperation
 
 from django.conf import settings
-from PIL import Image, UnidentifiedImageError
+from PIL import Image, ImageFilter, ImageOps, UnidentifiedImageError
 from rapidfuzz import fuzz, process
 
 from core.models import Client, Receipt
@@ -34,7 +34,7 @@ def extract_receipt(image_file) -> dict:
 
     mime_type = getattr(image_file, 'content_type', None) or 'image/jpeg'
     original_bytes = image_file.read()
-    raw = _call_gemini(original_bytes, mime_type)
+    raw = _call_gemini(_prepare_image_bytes(original_bytes), 'image/png')
     all_names = list(raw.get('possible_names') or [])
 
     if _best_score(all_names) < MATCH_CONFIDENCE_THRESHOLD:
@@ -53,7 +53,7 @@ def extract_receipt(image_file) -> dict:
         # reliable attempt are kept — rotating doesn't improve those and
         # risks a worse read.
         for angle in (90, 180, 270):
-            retry_raw = _call_gemini(_rotate_image_bytes(original_bytes, angle), 'image/png')
+            retry_raw = _call_gemini(_prepare_image_bytes(original_bytes, angle), 'image/png')
             all_names.extend(retry_raw.get('possible_names') or [])
             if _best_score(all_names) >= MATCH_CONFIDENCE_THRESHOLD:
                 break
@@ -73,11 +73,31 @@ def _best_score(candidates: list[str]) -> float:
     return suggestion['score'] if suggestion else 0
 
 
-def _rotate_image_bytes(image_bytes: bytes, angle: int) -> bytes:
-    img = Image.open(io.BytesIO(image_bytes))
-    rotated = img.rotate(angle, expand=True)
+def _prepare_image_bytes(image_bytes: bytes, angle: int = 0) -> bytes:
+    """General-purpose preprocessing applied to every upload, not tuned to
+    any specific receipt: boosts legibility of low-quality photocopies
+    (common for handwritten Israeli invoice-book receipts — carbon-copy
+    duplicates are typically faint/low-contrast) so the model has a better
+    chance of reading small or handwritten fields correctly, whatever
+    they happen to say. Also handles the optional rotation for the retry
+    loop, so every variant sent to the model gets the same treatment.
+    """
+    img = Image.open(io.BytesIO(image_bytes)).convert('RGB')
+    if angle:
+        img = img.rotate(angle, expand=True)
+
+    # Upscale small images — more pixels per character helps resolve
+    # individual strokes, especially handwriting.
+    min_dim = min(img.size)
+    if min_dim < 1500:
+        scale = 1500 / min_dim
+        img = img.resize((round(img.width * scale), round(img.height * scale)), Image.LANCZOS)
+
+    img = ImageOps.autocontrast(img, cutoff=1)
+    img = img.filter(ImageFilter.SHARPEN)
+
     out = io.BytesIO()
-    rotated.convert('RGB').save(out, format='PNG')
+    img.save(out, format='PNG')
     return out.getvalue()
 
 
@@ -135,15 +155,14 @@ handwritten, and convert to YYYY-MM-DD (a 2-digit year like "26" means
 2026). Israeli date order is DD/MM/YY, not MM/DD/YY. Only use null if no
 date is legible anywhere on the receipt at all.
 
-amount: handwritten Israeli receipts/invoices often show shekels and
-agorot (cents) as two separate stacked numbers or two columns (e.g. a
-subtotal row, a VAT/מע"מ row, and a total row), not as one number with a
-decimal point. If you see a total made of separate shekel and agorot
-parts, combine them as a proper decimal (e.g. shekel part "531" + agorot
-part "00" is 531.00, NOT 53100). A typical receipt amount is tens to a
-few thousand ש"ח — if your reading implies tens of thousands or more,
-re-check whether you accidentally concatenated separate rows/columns
-into one integer instead of treating the last two digits as agorot.
+amount: read the digits exactly as they are written — do not insert,
+assume, or infer a decimal point that you cannot actually see. Only treat
+part of the number as agorot (cents) if there is a clear, visible decimal
+separator (a period, comma, or a field explicitly and visibly labeled
+with separate "שקלים"/"אגורות" boxes) — never based on how large the
+resulting number seems. If the receipt writes a plain, unbroken sequence
+of digits with no visible separator, that whole sequence is the amount,
+however large.
 
 Fixed category ids to choose from (pick the closest, default to "other" if unsure):
 {category_lines}
@@ -160,7 +179,11 @@ especially handwritten ones, before giving up."""
                 types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
                 prompt,
             ],
-            config=types.GenerateContentConfig(response_mime_type='application/json'),
+            # Low temperature: this is a read-the-page-accurately task, not
+            # a creative one — reduces run-to-run variance on borderline
+            # (blurry/handwritten) fields rather than sampling a different
+            # answer each time.
+            config=types.GenerateContentConfig(response_mime_type='application/json', temperature=0.1),
         )
         return json.loads(response.text)
     except (json.JSONDecodeError, ValueError) as exc:
@@ -217,17 +240,25 @@ def _match_client(candidates: list[str]):
     if not names:
         return None, None, None
 
-    # token_sort_ratio, not WRatio: WRatio's partial-match blending scores
+    # token_set_ratio, not WRatio: WRatio's partial-match blending scores
     # two completely unrelated business names as ~85% just for sharing a
-    # generic suffix like 'בע"מ' — confirmed directly (ratio/token_sort_ratio
-    # both said ~35% for the same pair). That's fine when there's only ever
+    # generic suffix like 'בע"מ' (confirmed directly — 35-46% on the token-
+    # based scorers for that same pair). That's fine when there's only ever
     # one real candidate name to check (the old single-name design), but
     # now every name on the page (including the seller's, unrelated to any
-    # client) gets checked, so a scorer that doesn't inflate shared-suffix
-    # overlap matters a lot more here.
+    # client) gets checked, so avoiding shared-suffix false positives
+    # matters a lot more here.
+    #
+    # token_sort_ratio (tried first) fixes that false-positive but breaks a
+    # common real case: many client names are joint-account style, "X ו/או
+    # Y" — a receipt naming just "X" should still match, but token_sort_ratio
+    # penalizes the extra words and scores it only ~62%. token_set_ratio
+    # handles both correctly: ~46% on the unrelated shared-suffix pair,
+    # ~100% on "X" matching "X ו/או Y" (its tokens are a subset of the
+    # client's), and ~100% on simple word-order swaps too.
     best_overall = None
     for candidate in candidates:
-        match = process.extractOne(candidate, names.keys(), scorer=fuzz.token_sort_ratio)
+        match = process.extractOne(candidate, names.keys(), scorer=fuzz.token_set_ratio)
         if match and (best_overall is None or match[1] > best_overall[1]):
             best_overall = match
 
