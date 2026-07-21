@@ -395,6 +395,12 @@ class MeetingViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
 
+    def perform_update(self, serializer):
+        # Editing a meeting (new time, new lead time, etc.) should be
+        # reconsidered by the next reminder check, not skipped forever
+        # because an earlier version of it already fired.
+        serializer.save(reminder_sent=False)
+
 
 class ReceiptViewSet(viewsets.ModelViewSet):
     """Available to every worker (default IsAuthenticated). Approved

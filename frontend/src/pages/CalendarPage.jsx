@@ -13,7 +13,7 @@ function ChevronIcon({ direction }) {
 
 const WEEKDAY_LABELS = ['א', 'ב', 'ג', 'ד', 'ה', 'ו', 'ש'];
 const REMINDER_PRESETS = [5, 15, 30, 60, 1440];
-const emptyForm = { title: '', time: '10:00', reminder: '15', customReminder: '', notes: '', attendeeIds: [] };
+const emptyForm = { title: '', time: '10:00', reminder: '15', customReminder: '', notes: '' };
 
 function pad(n) {
   return String(n).padStart(2, '0');
@@ -44,7 +44,6 @@ export function CalendarPage() {
   const [viewYear, setViewYear] = useState(today.getFullYear());
   const [viewMonth, setViewMonth] = useState(today.getMonth());
   const [meetings, setMeetings] = useState([]);
-  const [workers, setWorkers] = useState([]);
   const [error, setError] = useState('');
   const [popover, setPopover] = useState(null); // { day, meeting: meeting|null }
   const [form, setForm] = useState(emptyForm);
@@ -66,10 +65,6 @@ export function CalendarPage() {
   useEffect(() => {
     load();
   }, [load]);
-
-  useEffect(() => {
-    if (isSuperuser) api.listWorkers().then(setWorkers).catch(() => {});
-  }, [isSuperuser]);
 
   useEffect(() => {
     if (!popover) return;
@@ -133,7 +128,6 @@ export function CalendarPage() {
       reminder: isPreset ? String(meeting.reminder_minutes_before) : 'custom',
       customReminder: isPreset ? '' : String(meeting.reminder_minutes_before),
       notes: meeting.notes || '',
-      attendeeIds: meeting.attendees.map((a) => a.id),
     });
     setPopover({ day, meeting });
   }
@@ -156,7 +150,6 @@ export function CalendarPage() {
         notes: form.notes,
         start_time: start.toISOString(),
         reminder_minutes_before: reminderMinutes,
-        attendee_ids: form.attendeeIds,
       };
       if (popover.meeting) {
         await api.updateMeeting(popover.meeting.id, payload);
@@ -314,22 +307,6 @@ export function CalendarPage() {
                   הערות
                   <textarea value={form.notes} onChange={(e) => updateForm('notes', e.target.value)} />
                 </label>
-                {workers.length > 0 && (
-                  <label>
-                    משתתפים
-                    <select
-                      multiple
-                      value={form.attendeeIds.map(String)}
-                      onChange={(e) =>
-                        updateForm('attendeeIds', Array.from(e.target.selectedOptions, (o) => Number(o.value)))
-                      }
-                    >
-                      {workers.map((w) => (
-                        <option key={w.id} value={w.id}>{w.first_name || w.username}</option>
-                      ))}
-                    </select>
-                  </label>
-                )}
 
                 {error && <p className="error">{error}</p>}
 
@@ -351,11 +328,6 @@ export function CalendarPage() {
                   {new Date(popover.meeting.start_time).toLocaleString('he-IL', { dateStyle: 'medium', timeStyle: 'short' })}
                 </p>
                 {popover.meeting.notes && <p>{popover.meeting.notes}</p>}
-                {popover.meeting.attendees.length > 0 && (
-                  <p className="hint">
-                    משתתפים: {popover.meeting.attendees.map((a) => a.first_name || a.username).join(', ')}
-                  </p>
-                )}
               </div>
             )}
           </div>
