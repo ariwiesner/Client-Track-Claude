@@ -35,30 +35,42 @@ def extract_receipt(image_file) -> dict:
     mime_type = getattr(image_file, 'content_type', None) or 'image/jpeg'
     original_bytes = image_file.read()
     raw = _call_gemini(original_bytes, mime_type)
+    all_names = list(raw.get('possible_names') or [])
 
-    if not raw.get('client_name_guess'):
-        # A sideways/rotated photo: the model reliably keeps reading
-        # numeric fields (amount/date/receipt number) but can silently
-        # miss a smaller name field entirely rather than misreading it —
-        # confirmed by testing the same real receipt both ways. Asking the
-        # model to self-report its own rotation was unreliable, so instead
-        # just try the other 3 orientations and keep whichever one finds a
-        # name. Only runs for the subset of uploads where the straight-on
-        # attempt didn't find one, so the common case (already upright)
-        # costs a single call as before.
+    if _best_score(all_names) < MATCH_CONFIDENCE_THRESHOLD:
+        # A sideways/rotated photo: the model reliably keeps reading a big,
+        # prominent letterhead name sideways just fine, but can silently
+        # miss a smaller customer-name field entirely — confirmed by
+        # testing the same real receipt both ways (a rotation that finds
+        # only the seller's name looks identical to "found a name" unless
+        # we actually check whether it matches a real client). So keep
+        # trying other orientations — accumulating candidate names across
+        # all of them rather than stopping at the first non-empty list —
+        # until one clears the confidence threshold or we run out of
+        # rotations to try. Asking the model to self-report its own
+        # rotation was unreliable (tested separately), hence brute-forcing
+        # it instead. Only the numeric fields from the very first, already-
+        # reliable attempt are kept — rotating doesn't improve those and
+        # risks a worse read.
         for angle in (90, 180, 270):
             retry_raw = _call_gemini(_rotate_image_bytes(original_bytes, angle), 'image/png')
-            if retry_raw.get('client_name_guess'):
-                raw = retry_raw
+            all_names.extend(retry_raw.get('possible_names') or [])
+            if _best_score(all_names) >= MATCH_CONFIDENCE_THRESHOLD:
                 break
 
     coerced = _coerce_response(raw)
+    coerced.pop('possible_names', None)
 
-    client_id, score, suggestion = _match_client(coerced.pop('client_name_guess'))
+    client_id, score, suggestion = _match_client(all_names)
     coerced['client_id'] = client_id
     coerced['client_match_score'] = score
     coerced['client_suggestion'] = suggestion
     return coerced
+
+
+def _best_score(candidates: list[str]) -> float:
+    _, _, suggestion = _match_client(candidates)
+    return suggestion['score'] if suggestion else 0
 
 
 def _rotate_image_bytes(image_bytes: bytes, angle: int) -> bytes:
@@ -84,35 +96,61 @@ def _call_gemini(image_bytes: bytes, mime_type: str) -> dict:
     # name from that list even when the receipt didn't actually name any
     # client. Matching against real clients happens purely server-side in
     # _match_client — this call only transcribes what's actually printed.
+    #
+    # Also deliberately NOT asking the model to decide *which* printed name
+    # is "the client" (vs. the seller) — that depends on business context
+    # it doesn't have. A receipt from a client who's a self-employed
+    # tradesperson may have that client's own name as the prominent
+    # top-of-page letterhead, indistinguishable in principle from a normal
+    # seller letterhead. So instead: surface every plausible name on the
+    # page as a candidate, and let server-side fuzzy-matching against the
+    # real client list (the actual source of truth for "who is a client")
+    # decide which one, if any, is real.
     prompt = f"""You are reading a business receipt (קבלה) photo for an Israeli bookkeeping office.
+The photo may be printed, typed, or HANDWRITTEN (including cursive) — read
+handwritten text just as carefully as printed text; do not skip a field or
+give up just because it's handwritten or the handwriting is messy.
+
 Extract these fields and return STRICT JSON only, no markdown, no commentary:
 {{
-  "client_name_guess": string or null,
+  "possible_names": array of strings (can be empty),
   "amount": number or null,
   "receipt_number": string or "",
   "receipt_date": "YYYY-MM-DD" or null,
   "category": one of the category ids below
 }}
 
-client_name_guess is the CUSTOMER this receipt was issued to — a person or
-business name printed anywhere on the receipt, not only next to an
-explicit "לכבוד"/customer/recipient label. It's often unlabeled: printed by
-itself near the top, in an address block, or beside an ID number.
+possible_names: list EVERY distinct person or business name printed or
+handwritten anywhere on the receipt — a prominent name/header at the top,
+a store/seller letterhead, a customer/recipient field, a handwritten name
+near a signature, anywhere. Do not try to judge which one (if any) is "the
+customer" versus "the seller" — just list every name-like string you see,
+copied exactly as written. Include a name even if it's the only/most
+prominent text on the page. Empty list only if truly no name appears
+anywhere.
 
-Do NOT use the issuing store/business's own name for this — that's the
-seller, always shown as the letterhead with its own logo, phone numbers,
-and business address (usually the most prominent text on the page, often
-top-right). The customer name (if present) is a second, separate name
-elsewhere on the page identifying who the receipt was made out to.
+receipt_date: receipts are often handwritten with short date formats like
+"6/5/26" or "27.4.26" — read these carefully digit by digit even when
+handwritten, and convert to YYYY-MM-DD (a 2-digit year like "26" means
+2026). Israeli date order is DD/MM/YY, not MM/DD/YY. Only use null if no
+date is legible anywhere on the receipt at all.
 
-Copy the customer name exactly as written. If no such second name is
-legible anywhere on the receipt, use null. Never substitute the seller's
-name, and never invent a name that isn't printed on the receipt.
+amount: handwritten Israeli receipts/invoices often show shekels and
+agorot (cents) as two separate stacked numbers or two columns (e.g. a
+subtotal row, a VAT/מע"מ row, and a total row), not as one number with a
+decimal point. If you see a total made of separate shekel and agorot
+parts, combine them as a proper decimal (e.g. shekel part "531" + agorot
+part "00" is 531.00, NOT 53100). A typical receipt amount is tens to a
+few thousand ש"ח — if your reading implies tens of thousands or more,
+re-check whether you accidentally concatenated separate rows/columns
+into one integer instead of treating the last two digits as agorot.
 
 Fixed category ids to choose from (pick the closest, default to "other" if unsure):
 {category_lines}
 
-If a field is unreadable, use null (or "" for receipt_number)."""
+If a field is genuinely unreadable, use null (or "" for receipt_number,
+or [] for possible_names) — but make a real effort on every field first,
+especially handwritten ones, before giving up."""
 
     try:
         client = genai.Client(api_key=settings.GEMINI_API_KEY)
@@ -146,8 +184,12 @@ def _coerce_response(raw: dict) -> dict:
     if not isinstance(receipt_date, str):
         receipt_date = None
 
+    possible_names = raw.get('possible_names')
+    if not isinstance(possible_names, list):
+        possible_names = []
+
     return {
-        'client_name_guess': raw.get('client_name_guess') or None,
+        'possible_names': [n for n in possible_names if isinstance(n, str) and n.strip()],
         'amount': amount,
         'receipt_number': raw.get('receipt_number') or '',
         'receipt_date': receipt_date,
@@ -155,26 +197,43 @@ def _coerce_response(raw: dict) -> dict:
     }
 
 
-def _match_client(candidate: str | None):
-    """Fuzzy-matches candidate against active clients.
+def _match_client(candidates: list[str]):
+    """Fuzzy-matches each candidate name against active clients and keeps
+    the best-scoring one overall — the model surfaces every name it sees
+    on the page (seller letterhead, customer field, handwritten note, all
+    of it) without judging which is "the client", so this is what actually
+    decides that, against the real client list.
 
     Returns (client_id, score, suggestion): client_id/score are only set
-    when the match clears MATCH_CONFIDENCE_THRESHOLD (safe to auto-fill).
-    suggestion is the best candidate regardless of threshold — a "closest
-    match" hint the worker can confirm with one click even when it's not
-    confident enough to auto-select.
+    when the best match clears MATCH_CONFIDENCE_THRESHOLD (safe to
+    auto-fill). suggestion is the best candidate regardless of threshold —
+    a "closest match" hint the worker can confirm with one click even when
+    it's not confident enough to auto-select.
     """
-    if not candidate:
+    if not candidates:
         return None, None, None
 
     names = dict(Client.objects.filter(is_active=True).values_list('name', 'id'))
     if not names:
         return None, None, None
 
-    best = process.extractOne(candidate, names.keys(), scorer=fuzz.WRatio)
-    if not best:
+    # token_sort_ratio, not WRatio: WRatio's partial-match blending scores
+    # two completely unrelated business names as ~85% just for sharing a
+    # generic suffix like 'בע"מ' — confirmed directly (ratio/token_sort_ratio
+    # both said ~35% for the same pair). That's fine when there's only ever
+    # one real candidate name to check (the old single-name design), but
+    # now every name on the page (including the seller's, unrelated to any
+    # client) gets checked, so a scorer that doesn't inflate shared-suffix
+    # overlap matters a lot more here.
+    best_overall = None
+    for candidate in candidates:
+        match = process.extractOne(candidate, names.keys(), scorer=fuzz.token_sort_ratio)
+        if match and (best_overall is None or match[1] > best_overall[1]):
+            best_overall = match
+
+    if not best_overall:
         return None, None, None
-    name, score, _ = best
+    name, score, _ = best_overall
     suggestion = {'client_id': names[name], 'name': name, 'score': score}
     if score < MATCH_CONFIDENCE_THRESHOLD:
         return None, None, suggestion
