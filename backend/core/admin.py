@@ -1,8 +1,8 @@
 from django.contrib import admin
 
 from core.models import (
-    Client, Meeting, MonthlyBilling, Notification, PushSubscription, Receipt, ReceiptChatUpload,
-    TimeEntry, TrackedSystem,
+    Client, GoogleCalendarCredential, Meeting, MonthlyBilling, Notification, PushSubscription,
+    Receipt, ReceiptChatUpload, TimeEntry, TrackedSystem,
 )
 
 
@@ -59,6 +59,14 @@ class PushSubscriptionAdmin(admin.ModelAdmin):
 
 @admin.register(Meeting)
 class MeetingAdmin(admin.ModelAdmin):
-    list_display = ['title', 'start_time', 'reminder_minutes_before', 'reminder_sent', 'created_by']
+    list_display = [
+        'title', 'start_time', 'reminder_minutes_before', 'reminder_sent', 'created_by',
+        'google_event_id',
+    ]
     list_filter = ['reminder_sent']
     date_hierarchy = 'start_time'
+
+
+@admin.register(GoogleCalendarCredential)
+class GoogleCalendarCredentialAdmin(admin.ModelAdmin):
+    list_display = ['user', 'token_expiry', 'updated_at']

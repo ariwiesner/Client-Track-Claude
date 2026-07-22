@@ -65,7 +65,13 @@ nano .env   # set DJANGO_SECRET_KEY (any long random string),
             # DJANGO_ALLOWED_HOSTS=tracker.yourdomain.com,
             # DJANGO_CORS_ORIGINS=https://tracker.yourdomain.com,
             # VAPID_PRIVATE_KEY (the raw key string printed above),
-            # VAPID_CLAIMS_EMAIL=you@example.com
+            # VAPID_CLAIMS_EMAIL=you@example.com,
+            # GOOGLE_OAUTH_CLIENT_ID / GOOGLE_OAUTH_CLIENT_SECRET (from a
+            #   "Web application" OAuth client at console.cloud.google.com —
+            #   add https://tracker.yourdomain.com/api/google/oauth/callback/
+            #   as an authorized redirect URI on that client),
+            # GOOGLE_OAUTH_REDIRECT_URI=https://tracker.yourdomain.com/api/google/oauth/callback/,
+            # FRONTEND_URL=https://tracker.yourdomain.com
 
 python manage.py migrate
 python manage.py createsuperuser   # your admin login for /admin/
@@ -90,6 +96,14 @@ if nobody has the app open):
 sudo cp ../deploy/client-tracker-reminders.service ../deploy/client-tracker-reminders.timer /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now client-tracker-reminders.timer
+```
+
+And the timer that pulls new events from dad's connected Google Calendar every minute:
+
+```bash
+sudo cp ../deploy/client-tracker-google-sync.service ../deploy/client-tracker-google-sync.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now client-tracker-google-sync.timer
 ```
 
 ## 5. Frontend
