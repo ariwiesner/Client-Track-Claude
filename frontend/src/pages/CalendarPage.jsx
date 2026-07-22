@@ -49,6 +49,9 @@ export function CalendarPage() {
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
   const popoverRef = useRef(null);
+  const [googleConnected, setGoogleConnected] = useState(null); // null while loading
+  const [googleBusy, setGoogleBusy] = useState(false);
+  const [googleMessage, setGoogleMessage] = useState('');
 
   const days = useMemo(() => buildMonthGrid(viewYear, viewMonth), [viewYear, viewMonth]);
   const monthLabel = new Date(viewYear, viewMonth, 1).toLocaleString('he-IL', { month: 'long', year: 'numeric' });
@@ -65,6 +68,29 @@ export function CalendarPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  const refreshGoogleStatus = useCallback(async () => {
+    if (!isSuperuser) return;
+    try {
+      const { connected } = await api.googleStatus();
+      setGoogleConnected(connected);
+    } catch {
+      setGoogleConnected(false);
+    }
+  }, [isSuperuser]);
+
+  useEffect(() => {
+    refreshGoogleStatus();
+  }, [refreshGoogleStatus]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const result = params.get('google');
+    if (!result) return;
+    setGoogleMessage(result === 'connected' ? 'יומן Google חובר בהצלחה.' : 'חיבור יומן Google נכשל, נסה שוב.');
+    window.history.replaceState({}, '', window.location.pathname);
+    if (result === 'connected') refreshGoogleStatus();
+  }, [refreshGoogleStatus]);
 
   useEffect(() => {
     if (!popover) return;
@@ -178,6 +204,29 @@ export function CalendarPage() {
     }
   }
 
+  async function handleConnectGoogle() {
+    setGoogleBusy(true);
+    try {
+      const { auth_url } = await api.googleAuthStart();
+      window.location.href = auth_url;
+    } catch (err) {
+      setGoogleMessage(err.message);
+      setGoogleBusy(false);
+    }
+  }
+
+  async function handleDisconnectGoogle() {
+    setGoogleBusy(true);
+    try {
+      await api.googleDisconnect();
+      setGoogleConnected(false);
+    } catch (err) {
+      setGoogleMessage(err.message);
+    } finally {
+      setGoogleBusy(false);
+    }
+  }
+
   return (
     <div className="calendar-page">
       <header className="dashboard-header">
@@ -204,8 +253,22 @@ export function CalendarPage() {
             )}
           </div>
         </div>
+        {isSuperuser && googleConnected !== null && (
+          <div className="header-actions">
+            {googleConnected ? (
+              <button type="button" className="secondary" onClick={handleDisconnectGoogle} disabled={googleBusy}>
+                מחובר ליומן Google ✓ — ניתוק
+              </button>
+            ) : (
+              <button type="button" onClick={handleConnectGoogle} disabled={googleBusy}>
+                {googleBusy ? 'מתחבר…' : 'חיבור ליומן Google'}
+              </button>
+            )}
+          </div>
+        )}
       </header>
 
+      {googleMessage && <p className="hint">{googleMessage}</p>}
       {error && !popover && <p className="error">{error}</p>}
 
       <div className="calendar-grid">

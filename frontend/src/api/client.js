@@ -116,4 +116,8 @@ export const api = {
   createMeeting: (data) => request('/meetings/', { method: 'POST', body: data }),
   updateMeeting: (id, data) => request(`/meetings/${id}/`, { method: 'PATCH', body: data }),
   deleteMeeting: (id) => request(`/meetings/${id}/`, { method: 'DELETE' }),
+
+  googleAuthStart: () => request('/google/oauth/start/'),
+  googleStatus: () => request('/google/status/'),
+  googleDisconnect: () => request('/google/disconnect/', { method: 'POST' }),
 };

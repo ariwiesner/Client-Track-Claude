@@ -2,10 +2,12 @@ import os
 from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
 
+from django.conf import settings
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
 from django.core.files.base import ContentFile
 from django.db.models import DurationField, ExpressionWrapper, F, Sum
+from django.http import HttpResponseRedirect
 from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.authtoken.models import Token
@@ -15,8 +17,8 @@ from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 
 from core.models import (
-    Client, Meeting, MonthlyBilling, Notification, PushSubscription, Receipt, ReceiptChatUpload,
-    TimeEntry, TrackedSystem,
+    Client, GoogleCalendarCredential, Meeting, MonthlyBilling, Notification, PushSubscription,
+    Receipt, ReceiptChatUpload, TimeEntry, TrackedSystem,
 )
 from core.permissions import IsSuperUser, IsSuperUserOrReadOnly
 from core.serializers import (
@@ -31,7 +33,7 @@ from core.serializers import (
     TrackedSystemSerializer,
     UserSerializer,
 )
-from core.services import billing, meetings, notifications, receipt_llm
+from core.services import billing, google_calendar, meetings, notifications, receipt_llm
 
 RECEIPT_CHAT_RETENTION_DAYS = 7
 
@@ -393,13 +395,54 @@ class MeetingViewSet(viewsets.ModelViewSet):
         return qs
 
     def perform_create(self, serializer):
-        serializer.save(created_by=self.request.user)
+        meeting = serializer.save(created_by=self.request.user)
+        google_calendar.push_create(meeting)
 
     def perform_update(self, serializer):
         # Editing a meeting (new time, new lead time, etc.) should be
         # reconsidered by the next reminder check, not skipped forever
         # because an earlier version of it already fired.
-        serializer.save(reminder_sent=False)
+        meeting = serializer.save(reminder_sent=False)
+        google_calendar.push_update(meeting)
+
+    def perform_destroy(self, instance):
+        google_calendar.push_delete(instance)
+        instance.delete()
+
+
+@api_view(['GET'])
+@permission_classes([IsSuperUser])
+def google_oauth_start_view(request):
+    flow = google_calendar.build_auth_flow()
+    auth_url, _ = flow.authorization_url(access_type='offline', prompt='consent')
+    return Response({'auth_url': auth_url})
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])  # hit directly by Google's browser redirect, no auth header
+def google_oauth_callback_view(request):
+    code = request.GET.get('code')
+    dad = User.objects.filter(is_superuser=True).first()
+    if not code or not dad:
+        return HttpResponseRedirect(f'{settings.FRONTEND_URL}/calendar?google=error')
+    flow = google_calendar.build_auth_flow()
+    flow.fetch_token(code=code)
+    google_calendar.save_credentials(dad, flow.credentials)
+    return HttpResponseRedirect(f'{settings.FRONTEND_URL}/calendar?google=connected')
+
+
+@api_view(['GET'])
+@permission_classes([IsSuperUser])
+def google_status_view(request):
+    connected = GoogleCalendarCredential.objects.filter(user=request.user).exists()
+    return Response({'connected': connected})
+
+
+@api_view(['POST'])
+@permission_classes([IsSuperUser])
+def google_disconnect_view(request):
+    GoogleCalendarCredential.objects.filter(user=request.user).delete()
+    return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class ReceiptViewSet(viewsets.ModelViewSet):

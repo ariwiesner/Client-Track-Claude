@@ -164,6 +164,16 @@ GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
 VAPID_PRIVATE_KEY = os.environ.get('VAPID_PRIVATE_KEY')
 VAPID_CLAIMS_EMAIL = os.environ.get('VAPID_CLAIMS_EMAIL')
 
+# Google Calendar two-way sync. A "Web application" OAuth client (not the
+# "Desktop app" type) since dad connects via a button in the deployed web
+# app, not a local CLI script.
+GOOGLE_OAUTH_CLIENT_ID = os.environ.get('GOOGLE_OAUTH_CLIENT_ID')
+GOOGLE_OAUTH_CLIENT_SECRET = os.environ.get('GOOGLE_OAUTH_CLIENT_SECRET')
+GOOGLE_OAUTH_REDIRECT_URI = os.environ.get(
+    'GOOGLE_OAUTH_REDIRECT_URI', 'https://127.0.0.1:8000/api/google/oauth/callback/'
+)
+FRONTEND_URL = os.environ.get('FRONTEND_URL', 'https://127.0.0.1:5173')
+
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/

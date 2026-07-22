@@ -25,6 +25,12 @@ Thumbs.db
 .env
 .env.local
 
+# Standalone Google API OAuth test script + its secrets — never part of
+# the project source, kept out of git entirely.
+/credentials.json
+/token.json
+/quickstart.py
+
 # HTTPS dev certs (machine-specific, regenerate per machine with mkcert)
 certs/
 

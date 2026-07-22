@@ -1,0 +1,10 @@
+[Unit]
+Description=Client Tracker Google Calendar pull sync
+After=network.target
+
+[Service]
+Type=oneshot
+User=deploy
+WorkingDirectory=/opt/client-tracker/backend
+EnvironmentFile=/opt/client-tracker/backend/.env
+ExecStart=/opt/client-tracker/backend/venv/bin/python manage.py sync_google_calendar
