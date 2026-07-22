@@ -872,6 +872,51 @@ button:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
 .breakdown-list li:last-child { border-bottom: none; }
 .breakdown-list li span:last-child { font-family: var(--font-mono); font-weight: 600; }
 
+/* ===== Dashboard summary (KPI tiles + system breakdown chart) ===== */
+.dashboard-summary { margin-bottom: var(--space-5); }
+.dashboard-summary .stat-bar-stats { gap: var(--space-7); }
+
+.system-breakdown-chart {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-top: var(--space-5);
+}
+.system-breakdown-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.system-breakdown-label {
+  flex: 0 0 140px;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.system-breakdown-track {
+  flex: 1;
+  min-width: 0;
+  height: 12px;
+  background: var(--grey-100);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.system-breakdown-bar {
+  height: 100%;
+  border-radius: var(--radius-sm);
+  transition: width 220ms var(--ease);
+}
+.system-breakdown-value {
+  flex: 0 0 auto;
+  min-width: 82px;
+  text-align: left;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
 .table-scroll { overflow-x: auto; }
 .entries-table { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
 .entries-table th {

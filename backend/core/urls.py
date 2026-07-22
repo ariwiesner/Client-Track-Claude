@@ -12,6 +12,7 @@ from core.views import (
     TrackedSystemViewSet,
     WorkerViewSet,
     change_password_view,
+    dashboard_summary_view,
     login_view,
     logout_view,
     me_view,
@@ -35,5 +36,6 @@ urlpatterns = [
     path('auth/me/', me_view, name='me'),
     path('auth/change-password/', change_password_view, name='change-password'),
     path('me/summary/', my_summary_view, name='me-summary'),
+    path('dashboard/summary/', dashboard_summary_view, name='dashboard-summary'),
     path('push/subscribe/', push_subscribe_view, name='push-subscribe'),
 ] + router.urls
