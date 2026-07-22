@@ -2,7 +2,8 @@ from django.contrib.auth.models import User
 from rest_framework import serializers
 
 from core.models import (
-    Client, MonthlyBilling, Notification, Receipt, ReceiptChatUpload, TimeEntry, TrackedSystem,
+    Client, Meeting, MonthlyBilling, Notification, Receipt, ReceiptChatUpload, TimeEntry,
+    TrackedSystem,
 )
 
 
@@ -128,3 +129,25 @@ class NotificationSerializer(serializers.ModelSerializer):
         model = Notification
         fields = ['id', 'category', 'message', 'is_read', 'created_at']
         read_only_fields = fields
+
+
+class MeetingSerializer(serializers.ModelSerializer):
+    created_by_name = serializers.SerializerMethodField()
+    attendees = UserSerializer(many=True, read_only=True)
+    attendee_ids = serializers.PrimaryKeyRelatedField(
+        source='attendees', many=True, queryset=User.objects.all(), write_only=True, required=False
+    )
+
+    class Meta:
+        model = Meeting
+        fields = [
+            'id', 'title', 'notes', 'start_time', 'end_time',
+            'reminder_minutes_before', 'created_by_name', 'attendees', 'attendee_ids',
+            'created_at',
+        ]
+        read_only_fields = ['created_at']
+
+    def get_created_by_name(self, obj):
+        if not obj.created_by:
+            return None
+        return obj.created_by.first_name or obj.created_by.username

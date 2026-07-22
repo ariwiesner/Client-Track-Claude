@@ -231,6 +231,7 @@ class Notification(models.Model):
     CATEGORY_BILLING = 'billing'
     CATEGORY_LOGIN = 'login'
     CATEGORY_LOGOUT = 'logout'
+    CATEGORY_MEETING_REMINDER = 'meeting_reminder'
     CATEGORY_CHOICES = [
         (CATEGORY_SIGN_IN, 'כניסה לשעון'),
         (CATEGORY_SIGN_OUT, 'יציאה משעון'),
@@ -239,6 +240,7 @@ class Notification(models.Model):
         (CATEGORY_BILLING, 'חיוב'),
         (CATEGORY_LOGIN, 'התחברות'),
         (CATEGORY_LOGOUT, 'התנתקות'),
+        (CATEGORY_MEETING_REMINDER, 'תזכורת פגישה'),
     ]
 
     category = models.CharField(max_length=20, choices=CATEGORY_CHOICES)
@@ -275,3 +277,54 @@ class PushSubscription(models.Model):
 
     def __str__(self):
         return f"{self.user} — {self.endpoint[:60]}"
+
+
+class Meeting(models.Model):
+    """A meeting dad schedules for a day/hour. Visible read-only to every
+    worker; only he (is_superuser) can create/edit/delete one.
+    reminder_sent makes the periodic reminder check idempotent — it's set
+    once the lead-time notification has fired, so the same meeting is never
+    reminded twice.
+    """
+    title = models.CharField(max_length=200)
+    notes = models.TextField(blank=True)
+    start_time = models.DateTimeField()
+    end_time = models.DateTimeField(null=True, blank=True)
+    reminder_minutes_before = models.PositiveIntegerField(default=15)
+    reminder_sent = models.BooleanField(default=False)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='+'
+    )
+    attendees = models.ManyToManyField(
+        settings.AUTH_USER_MODEL, blank=True, related_name='meetings'
+    )
+    # Set once this meeting is mirrored to/from Google Calendar, so sync
+    # logic can tell "already linked" apart from "needs to be pushed/pulled"
+    # and avoid creating duplicates in either direction.
+    google_event_id = models.CharField(max_length=255, blank=True)
+    synced_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['start_time']
+
+    def __str__(self):
+        return f"{self.title} — {self.start_time:%Y-%m-%d %H:%M}"
+
+
+class GoogleCalendarCredential(models.Model):
+    """One user's Google OAuth tokens for Calendar sync. In practice only
+    dad ever connects one of these — same single-superuser assumption the
+    notification system already makes.
+    """
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='google_calendar_credential'
+    )
+    refresh_token = models.CharField(max_length=255)
+    access_token = models.CharField(max_length=255, blank=True)
+    token_expiry = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.user} — Google Calendar"

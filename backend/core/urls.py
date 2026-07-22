@@ -4,6 +4,7 @@ from django.urls import path
 
 from core.views import (
     ClientViewSet,
+    MeetingViewSet,
     MonthlyBillingViewSet,
     NotificationViewSet,
     ReceiptChatViewSet,
@@ -13,6 +14,10 @@ from core.views import (
     WorkerViewSet,
     change_password_view,
     dashboard_summary_view,
+    google_disconnect_view,
+    google_oauth_callback_view,
+    google_oauth_start_view,
+    google_status_view,
     login_view,
     logout_view,
     me_view,
@@ -29,6 +34,7 @@ router.register('workers', WorkerViewSet, basename='worker')
 router.register('receipts', ReceiptViewSet, basename='receipt')
 router.register('receipt-chat', ReceiptChatViewSet, basename='receiptchatupload')
 router.register('notifications', NotificationViewSet, basename='notification')
+router.register('meetings', MeetingViewSet, basename='meeting')
 
 urlpatterns = [
     path('auth/login/', login_view, name='login'),
@@ -38,4 +44,8 @@ urlpatterns = [
     path('me/summary/', my_summary_view, name='me-summary'),
     path('dashboard/summary/', dashboard_summary_view, name='dashboard-summary'),
     path('push/subscribe/', push_subscribe_view, name='push-subscribe'),
+    path('google/oauth/start/', google_oauth_start_view, name='google-oauth-start'),
+    path('google/oauth/callback/', google_oauth_callback_view, name='google-oauth-callback'),
+    path('google/status/', google_status_view, name='google-status'),
+    path('google/disconnect/', google_disconnect_view, name='google-disconnect'),
 ] + router.urls
