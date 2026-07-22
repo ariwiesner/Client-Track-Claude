@@ -82,6 +82,16 @@ sudo systemctl enable --now client-tracker-backend
 sudo systemctl status client-tracker-backend   # should say "active (running)"
 ```
 
+Also install the timer that checks every minute for meeting reminders that
+are due (so dad gets a push notification at the lead time he picked, even
+if nobody has the app open):
+
+```bash
+sudo cp ../deploy/client-tracker-reminders.service ../deploy/client-tracker-reminders.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now client-tracker-reminders.timer
+```
+
 ## 5. Frontend
 
 Build it **locally on your own computer** (or on the VPS, either works),

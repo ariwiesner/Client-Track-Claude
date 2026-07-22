@@ -15,13 +15,14 @@ from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 
 from core.models import (
-    Client, MonthlyBilling, Notification, PushSubscription, Receipt, ReceiptChatUpload, TimeEntry,
-    TrackedSystem,
+    Client, Meeting, MonthlyBilling, Notification, PushSubscription, Receipt, ReceiptChatUpload,
+    TimeEntry, TrackedSystem,
 )
-from core.permissions import IsSuperUser
+from core.permissions import IsSuperUser, IsSuperUserOrReadOnly
 from core.serializers import (
     ClientSerializer,
     CreateWorkerSerializer,
+    MeetingSerializer,
     MonthlyBillingSerializer,
     NotificationSerializer,
     ReceiptChatUploadSerializer,
@@ -30,7 +31,7 @@ from core.serializers import (
     TrackedSystemSerializer,
     UserSerializer,
 )
-from core.services import billing, notifications, receipt_llm
+from core.services import billing, meetings, notifications, receipt_llm
 
 RECEIPT_CHAT_RETENTION_DAYS = 7
 
@@ -373,6 +374,32 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
         )
         Notification.objects.filter(id__in=ids, is_read=False).update(is_read=True)
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class MeetingViewSet(viewsets.ModelViewSet):
+    """Read: every authenticated worker (read-only calendar). Write:
+    dad (is_superuser) only."""
+    serializer_class = MeetingSerializer
+    permission_classes = [IsSuperUserOrReadOnly]
+
+    def get_queryset(self):
+        qs = Meeting.objects.all()
+        start = self.request.query_params.get('start')  # YYYY-MM-DD
+        end = self.request.query_params.get('end')
+        if start:
+            qs = qs.filter(start_time__date__gte=start)
+        if end:
+            qs = qs.filter(start_time__date__lte=end)
+        return qs
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
+    def perform_update(self, serializer):
+        # Editing a meeting (new time, new lead time, etc.) should be
+        # reconsidered by the next reminder check, not skipped forever
+        # because an earlier version of it already fired.
+        serializer.save(reminder_sent=False)
 
 
 class ReceiptViewSet(viewsets.ModelViewSet):

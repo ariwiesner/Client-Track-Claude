@@ -1,0 +1,10 @@
+[Unit]
+Description=Client Tracker meeting reminder check
+After=network.target
+
+[Service]
+Type=oneshot
+User=deploy
+WorkingDirectory=/opt/client-tracker/backend
+EnvironmentFile=/opt/client-tracker/backend/.env
+ExecStart=/opt/client-tracker/backend/venv/bin/python manage.py send_meeting_reminders

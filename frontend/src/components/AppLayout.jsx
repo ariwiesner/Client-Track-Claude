@@ -14,6 +14,7 @@ const STATIC_TITLES = {
   '/workers': 'עובדים',
   '/profile': 'הפרופיל שלי',
   '/receipts': 'קבלות',
+  '/calendar': 'יומן',
 };
 
 function pageTitle(pathname) {
