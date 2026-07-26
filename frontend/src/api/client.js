@@ -90,6 +90,7 @@ export const api = {
   getWorkerSummary: (id, year, month) => request(`/workers/${id}/summary/?year=${year}&month=${month}`),
 
   getMySummary: (year, month) => request(`/me/summary/?year=${year}&month=${month}`),
+  getDashboardSummary: (year, month) => request(`/dashboard/summary/?year=${year}&month=${month}`),
   changePassword: (data) => request('/auth/change-password/', { method: 'POST', body: data }),
 
   listReceipts: (clientId, year, month) =>

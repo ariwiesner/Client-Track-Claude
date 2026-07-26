@@ -161,6 +161,84 @@ def my_summary_view(request):
     return Response(_compute_worker_summary(request.user, year, month))
 
 
+def _compute_dashboard_summary(year, month, include_admin_stats):
+    duration_expr = ExpressionWrapper(F('end_time') - F('start_time'), output_field=DurationField())
+    base_qs = TimeEntry.objects.filter(
+        status=TimeEntry.STATUS_STOPPED, start_time__year=year, start_time__month=month
+    )
+
+    def _hours(total):
+        return float(Decimal(total.total_seconds()) / Decimal(3600))
+
+    total_clients = Client.objects.filter(is_active=True).count()
+
+    by_client_rows = list(
+        base_qs.values('client_id', 'client__name', 'client__hourly_rate')
+        .annotate(total=Sum(duration_expr)).order_by('-total')
+    )
+
+    top_client = None
+    row = next(iter(by_client_rows), None)
+    if row and row['total']:
+        top_client = {'id': row['client_id'], 'name': row['client__name'], 'hours': _hours(row['total'])}
+
+    total_hours = sum((_hours(row['total']) for row in by_client_rows if row['total']), 0.0)
+
+    top_worker = None
+    total_revenue = None
+    total_unpaid = None
+    if include_admin_stats:
+        row = next(iter(
+            base_qs.values('employee_id', 'employee__first_name', 'employee__username')
+            .annotate(total=Sum(duration_expr)).order_by('-total')
+        ), None)
+        if row and row['total']:
+            top_worker = {
+                'id': row['employee_id'],
+                'name': row['employee__first_name'] or row['employee__username'],
+                'hours': _hours(row['total']),
+            }
+
+        total_revenue = sum(
+            (_hours(row['total']) * float(row['client__hourly_rate']) for row in by_client_rows if row['total']),
+            0.0,
+        )
+
+        billing.bulk_get_or_refresh_billing(Client.objects.filter(is_active=True), year, month)
+        unpaid_total = MonthlyBilling.objects.filter(
+            year=year, month=month, paid=False
+        ).aggregate(total=Sum('amount_owed'))['total']
+        total_unpaid = float(unpaid_total or 0)
+
+    system_breakdown = [
+        {'system_name': row['system__name'] or 'ידני', 'hours': _hours(row['total'])}
+        for row in (
+            base_qs.values('system__name').annotate(total=Sum(duration_expr)).order_by('-total')
+        )
+        if row['total']
+    ]
+
+    return {
+        'total_clients': total_clients,
+        'top_client': top_client,
+        'top_worker': top_worker,
+        'total_hours': total_hours,
+        'total_revenue': total_revenue,
+        'total_unpaid': total_unpaid,
+        'system_breakdown': system_breakdown,
+    }
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def dashboard_summary_view(request):
+    now = timezone.localtime()
+    year = int(request.query_params.get('year', now.year))
+    month = int(request.query_params.get('month', now.month))
+    data = _compute_dashboard_summary(year, month, include_admin_stats=request.user.is_staff)
+    return Response(data)
+
+
 class WorkerViewSet(viewsets.ModelViewSet):
     """Office-admin-only: list/add/edit workers, toggle admin rights, and
     deactivate (never hard-delete — their TimeEntry history must survive).
