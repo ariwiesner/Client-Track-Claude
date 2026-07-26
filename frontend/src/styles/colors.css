@@ -59,18 +59,6 @@
   --shadow-sm: 0 1px 2px rgba(32, 31, 54, 0.04), 0 1px 1px rgba(32, 31, 54, 0.03);
   --shadow-md: 0 4px 10px rgba(32, 31, 54, 0.06), 0 12px 28px rgba(32, 31, 54, 0.08);
   --shadow-lg: 0 10px 20px rgba(32, 31, 54, 0.08), 0 28px 56px rgba(32, 31, 54, 0.12);
-
-  /* Categorical chart palette — stable per-series colors (assigned by
-     entity identity, not sort rank). CVD-safe 8-hue order; don't reorder
-     or invent new hexes without re-validating contrast/distinctness. */
-  --chart-series-1: #2a78d6; /* blue */
-  --chart-series-2: #008300; /* green */
-  --chart-series-3: #e87ba4; /* magenta */
-  --chart-series-4: #eda100; /* yellow */
-  --chart-series-5: #1baf7a; /* aqua */
-  --chart-series-6: #eb6834; /* orange */
-  --chart-series-7: #4a3aa7; /* violet */
-  --chart-series-8: #e34948; /* red */
 }
 
 @media (prefers-color-scheme: dark) {
@@ -114,14 +102,5 @@
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
     --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.35), 0 12px 32px rgba(0, 0, 0, 0.35);
     --shadow-lg: 0 12px 24px rgba(0, 0, 0, 0.4), 0 32px 64px rgba(0, 0, 0, 0.5);
-
-    --chart-series-1: #3987e5;
-    --chart-series-2: #008300;
-    --chart-series-3: #d55181;
-    --chart-series-4: #c98500;
-    --chart-series-5: #199e70;
-    --chart-series-6: #d95926;
-    --chart-series-7: #9085e9;
-    --chart-series-8: #e66767;
   }
 }

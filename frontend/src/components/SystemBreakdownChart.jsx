@@ -1,5 +1,5 @@
-const COLOR_SLOTS = 8;
-const MAX_ROWS = 8;
+const COLOR_SLOTS = 6;
+const MAX_ROWS = 6;
 const OTHER_LABEL = 'אחר';
 
 // Assigns each system a stable color slot based on its name's position in an
@@ -37,21 +37,15 @@ export function SystemBreakdownChart({ data }) {
       {displayRows.map((row) => {
         const colorSlot = row.isOther ? null : colorIndex.get(row.system_name);
         const width = maxHours > 0 ? (row.hours / maxHours) * 100 : 0;
+        const bg = row.isOther ? 'var(--grey-100)' : `var(--avatar-${colorSlot + 1}-bg)`;
+        const fg = row.isOther ? 'var(--text-muted)' : `var(--avatar-${colorSlot + 1}-fg)`;
         return (
-          <div className="system-breakdown-row" key={row.system_name}>
+          <div className="system-breakdown-row" style={{ background: bg, color: fg }} key={row.system_name}>
             <span className="system-breakdown-label">{row.system_name}</span>
             <div className="system-breakdown-track">
-              <div
-                className="system-breakdown-bar"
-                style={{
-                  width: `${width}%`,
-                  background: row.isOther
-                    ? 'var(--text-faint)'
-                    : `var(--chart-series-${colorSlot + 1})`,
-                }}
-              />
+              <div className="system-breakdown-bar" style={{ width: `${width}%`, background: fg }} />
             </div>
-            <span className="system-breakdown-value">{row.hours.toFixed(2)} שעות</span>
+            <span className="system-breakdown-value">{row.hours.toFixed(1)} שעות</span>
           </div>
         );
       })}

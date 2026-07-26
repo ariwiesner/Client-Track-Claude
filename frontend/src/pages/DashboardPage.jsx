@@ -170,6 +170,7 @@ export function DashboardPage() {
       all: billings.length,
       paid: billings.filter((b) => b.paid).length,
       unpaid: billings.filter((b) => !b.paid).length,
+      worked: billings.filter((b) => Number(b.total_hours) > 0).length,
     }),
     [billings]
   );
@@ -249,7 +250,7 @@ export function DashboardPage() {
         </div>
       </header>
 
-      <DashboardSummary summary={summary} isStaff={!!user?.is_staff} />
+      <DashboardSummary summary={summary} isStaff={!!user?.is_staff} clientCounts={counts} />
 
       <div className="dashboard-toolbar">
         <div className="filter-tabs">
