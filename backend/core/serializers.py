@@ -41,6 +41,12 @@ class ClientSerializer(serializers.ModelSerializer):
             'hourly_rate', 'is_active', 'created_at',
             'case_number', 'tax_subject', 'unit', 'sub_case', 'representative',
             'representation_start', 'validity_91', 'bank_details',
+            'rivhit_customer_id', 'rivhit_customer_data', 'rivhit_total_invoiced',
+            'rivhit_synced_at',
+        ]
+        read_only_fields = [
+            'rivhit_customer_id', 'rivhit_customer_data', 'rivhit_total_invoiced',
+            'rivhit_synced_at',
         ]
 
 

@@ -71,7 +71,9 @@ nano .env   # set DJANGO_SECRET_KEY (any long random string),
             #   add https://tracker.yourdomain.com/api/google/oauth/callback/
             #   as an authorized redirect URI on that client),
             # GOOGLE_OAUTH_REDIRECT_URI=https://tracker.yourdomain.com/api/google/oauth/callback/,
-            # FRONTEND_URL=https://tracker.yourdomain.com
+            # FRONTEND_URL=https://tracker.yourdomain.com,
+            # RIVHIT_API_TOKEN (from Rivhit's own admin, under Settings -> API
+            #   — "מפתח API" — in the ריווחית web app)
 
 python manage.py migrate
 python manage.py createsuperuser   # your admin login for /admin/
@@ -104,6 +106,19 @@ And the timer that pulls new events from dad's connected Google Calendar every m
 sudo cp ../deploy/client-tracker-google-sync.service ../deploy/client-tracker-google-sync.timer /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now client-tracker-google-sync.timer
+```
+
+And the timer that matches each client to a Rivhit customer by name and
+pulls their profile, balance, and total-invoiced-this-year figure once a
+day (requires RIVHIT_API_TOKEN in `.env`; no manual per-client setup
+needed — a client only needs the exact same name in both systems. If a
+name doesn't match cleanly, the client's page says so, and a correction
+can be forced via `rivhit_customer_id` in /admin/):
+
+```bash
+sudo cp ../deploy/client-tracker-rivhit-sync.service ../deploy/client-tracker-rivhit-sync.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now client-tracker-rivhit-sync.timer
 ```
 
 ## 5. Frontend

@@ -23,6 +23,27 @@ class Client(models.Model):
     validity_91 = models.CharField(max_length=50, blank=True, verbose_name='תוקף 91')
     bank_details = models.CharField(max_length=100, blank=True, verbose_name='פרטי בנק')
 
+    # Rivhit (ריווחית) accounting-system integration. rivhit_customer_id is
+    # normally set automatically by core.services.rivhit.sync_clients(),
+    # which matches this Client to a Rivhit customer by name — left blank
+    # here means "not matched yet", not "needs to be filled in by hand".
+    # It's still a plain editable field so a bad auto-match (e.g. an
+    # ambiguous or misspelled name) can be corrected via /admin/, and once
+    # set it takes priority over name-matching on future syncs.
+    rivhit_customer_id = models.CharField(
+        max_length=50, blank=True, verbose_name='מזהה לקוח בריווחית'
+    )
+    # Rivhit's Customer.List/Get fields (name, address, contact info, tax
+    # numbers, balance, ...) mirrored as-is. A JSONField rather than one
+    # column per field since this is a read-only cache of another system's
+    # record, not data we ever query or edit field-by-field ourselves.
+    rivhit_customer_data = models.JSONField(default=dict, blank=True)
+    rivhit_total_invoiced = models.DecimalField(
+        max_digits=10, decimal_places=2, default=0,
+        verbose_name='סה"כ חשבוניות השנה (ריווחית)',
+    )
+    rivhit_synced_at = models.DateTimeField(null=True, blank=True)
+
     class Meta:
         ordering = ['name']
 
@@ -119,6 +140,25 @@ class TimeEntry(models.Model):
             return Decimal('0')
         seconds = (self.end_time - self.start_time).total_seconds()
         return Decimal(seconds) / Decimal(3600)
+
+
+class ClientAnnualFee(models.Model):
+    """A client's fixed professional fee for one calendar year — set from
+    the office's yearly שכ"ט Excel sheet (see import_annual_fees command),
+    or by hand for a client the sheet doesn't cover. Hours tracked via
+    TimeEntry no longer determine what a client owes; this fee does.
+    """
+    client = models.ForeignKey(Client, on_delete=models.CASCADE, related_name='annual_fees')
+    year = models.PositiveIntegerField()
+    amount = models.DecimalField(max_digits=10, decimal_places=2, verbose_name='שכר טרחה שנתי')
+    imported_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('client', 'year')
+        ordering = ['-year']
+
+    def __str__(self):
+        return f"{self.client} — {self.year}: ₪{self.amount}"
 
 
 class MonthlyBilling(models.Model):
