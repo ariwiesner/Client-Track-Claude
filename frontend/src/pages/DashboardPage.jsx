@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import { api } from '../api/client';
 import { ClientCard } from '../components/ClientCard';
+import { DashboardSummary } from '../components/DashboardSummary';
+import { useAuth } from '../context/AuthContext';
 import { useTimer } from '../context/TimerContext';
 import { groupHoursBySystem, distinctWorkersForMonth } from '../utils/breakdown';
 
@@ -53,11 +55,13 @@ const FILTERS = [
 export function DashboardPage() {
   const [billings, setBillings] = useState([]);
   const [workersByClient, setWorkersByClient] = useState({});
+  const [summary, setSummary] = useState(null);
   const [error, setError] = useState('');
   const [exporting, setExporting] = useState(false);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all');
   const { entry, start } = useTimer();
+  const { user } = useAuth();
 
   const today = new Date();
   const [viewYear, setViewYear] = useState(today.getFullYear());
@@ -91,7 +95,10 @@ export function DashboardPage() {
 
   const load = useCallback(async () => {
     try {
-      const data = await api.listBilling(viewYear, viewMonth + 1);
+      const [data] = await Promise.all([
+        api.listBilling(viewYear, viewMonth + 1),
+        api.getDashboardSummary(viewYear, viewMonth + 1).then(setSummary),
+      ]);
       setBillings(data);
 
       const billingsWithHours = data.filter(
@@ -163,6 +170,7 @@ export function DashboardPage() {
       all: billings.length,
       paid: billings.filter((b) => b.paid).length,
       unpaid: billings.filter((b) => !b.paid).length,
+      worked: billings.filter((b) => Number(b.total_hours) > 0).length,
     }),
     [billings]
   );
@@ -241,6 +249,8 @@ export function DashboardPage() {
           </button>
         </div>
       </header>
+
+      <DashboardSummary summary={summary} isStaff={!!user?.is_staff} clientCounts={counts} />
 
       <div className="dashboard-toolbar">
         <div className="filter-tabs">

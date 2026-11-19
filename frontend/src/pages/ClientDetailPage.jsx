@@ -191,6 +191,10 @@ export function ClientDetailPage() {
             <dt>פרטי בנק</dt>
             <dd>{client.bank_details || '—'}</dd>
           </div>
+          <div>
+            <dt>מזהה לקוח בריווחית</dt>
+            <dd>{client.rivhit_customer_id || '—'}</dd>
+          </div>
         </dl>
         <div className="details-footer">
           <button className="danger" onClick={handleDeactivate}>
@@ -209,6 +213,96 @@ export function ClientDetailPage() {
             </a>
           )}
         </div>
+      </section>
+
+      <section className="card">
+        <h2>נתוני ריווחית</h2>
+        {client.rivhit_customer_id ? (
+          client.rivhit_synced_at ? (
+            <>
+              <dl className="detail-list">
+                <div>
+                  <dt>שם בריווחית</dt>
+                  <dd>
+                    {[client.rivhit_customer_data?.first_name, client.rivhit_customer_data?.last_name]
+                      .filter(Boolean)
+                      .join(' ') || '—'}
+                  </dd>
+                </div>
+                <div>
+                  <dt>כתובת</dt>
+                  <dd>{client.rivhit_customer_data?.street || '—'}</dd>
+                </div>
+                <div>
+                  <dt>עיר</dt>
+                  <dd>{client.rivhit_customer_data?.city || '—'}</dd>
+                </div>
+                <div>
+                  <dt>מיקוד</dt>
+                  <dd>{client.rivhit_customer_data?.zipcode || '—'}</dd>
+                </div>
+                <div>
+                  <dt>טלפון</dt>
+                  <dd>{client.rivhit_customer_data?.phone || '—'}</dd>
+                </div>
+                <div>
+                  <dt>פקס</dt>
+                  <dd>{client.rivhit_customer_data?.fax || '—'}</dd>
+                </div>
+                <div>
+                  <dt>דוא"ל</dt>
+                  <dd>{client.rivhit_customer_data?.email || '—'}</dd>
+                </div>
+                <div>
+                  <dt>ת.ז. / ח.פ.</dt>
+                  <dd>{client.rivhit_customer_data?.id_number || '—'}</dd>
+                </div>
+                <div>
+                  <dt>מספר עוסק מורשה</dt>
+                  <dd>{client.rivhit_customer_data?.vat_number || '—'}</dd>
+                </div>
+                <div>
+                  <dt>הערות בריווחית</dt>
+                  <dd>{client.rivhit_customer_data?.comments || '—'}</dd>
+                </div>
+                <div>
+                  <dt>קוד מחירון</dt>
+                  <dd>{client.rivhit_customer_data?.price_list_id ?? '—'}</dd>
+                </div>
+                <div>
+                  <dt>אחוז הנחה</dt>
+                  <dd>
+                    {client.rivhit_customer_data?.discount_percent != null
+                      ? `${Number(client.rivhit_customer_data.discount_percent)}%`
+                      : '—'}
+                  </dd>
+                </div>
+                <div>
+                  <dt>יתרה</dt>
+                  <dd>
+                    {client.rivhit_customer_data?.balance != null
+                      ? `₪${Number(client.rivhit_customer_data.balance).toFixed(2)}`
+                      : '—'}
+                  </dd>
+                </div>
+                <div>
+                  <dt>הכנסות השנה</dt>
+                  <dd>₪{Number(client.rivhit_total_invoiced).toFixed(2)}</dd>
+                </div>
+              </dl>
+              <p className="hint">
+                עודכן לאחרונה {new Date(client.rivhit_synced_at).toLocaleString('he-IL')}
+              </p>
+            </>
+          ) : (
+            <p className="hint">מזוהה בריווחית (מזהה {client.rivhit_customer_id}), טרם בוצע סנכרון.</p>
+          )
+        ) : (
+          <p className="hint">
+            לא נמצאה התאמה אוטומטית בריווחית לפי השם "{client.name}". ודאו ששם הלקוח כאן זהה
+            לשם כרטיס הלקוח בריווחית, או קבעו התאמה ידנית דרך /admin/.
+          </p>
+        )}
       </section>
 
       <section className="card">

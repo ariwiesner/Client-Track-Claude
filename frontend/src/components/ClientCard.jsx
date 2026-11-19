@@ -84,6 +84,14 @@ export function ClientCard({ billing, workers = [], index = 0, isRunningHere, on
           <span className="client-card-stat-label">לתשלום</span>
           <span className="client-card-stat-value mono">₪{Number(billing.amount_owed).toFixed(2)}</span>
         </div>
+        {client.rivhit_customer_id && (
+          <div className="client-card-stat">
+            <span className="client-card-stat-label">הכנסות השנה</span>
+            <span className="client-card-stat-value mono">
+              ₪{Number(client.rivhit_total_invoiced).toFixed(2)}
+            </span>
+          </div>
+        )}
       </div>
 
       <div className="client-card-footer">

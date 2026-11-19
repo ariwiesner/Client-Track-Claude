@@ -174,6 +174,15 @@ GOOGLE_OAUTH_REDIRECT_URI = os.environ.get(
 )
 FRONTEND_URL = os.environ.get('FRONTEND_URL', 'https://127.0.0.1:5173')
 
+# Rivhit (ריווחית) accounting-system integration — pulls each client's
+# total invoiced-this-year amount onto their dashboard card. Real secret,
+# no insecure dev fallback. Generated from Rivhit's own admin under
+# Settings -> API (see DEPLOY.md).
+RIVHIT_API_TOKEN = os.environ.get('RIVHIT_API_TOKEN')
+RIVHIT_API_BASE_URL = os.environ.get(
+    'RIVHIT_API_BASE_URL', 'https://api.rivhit.co.il/online/RivhitOnlineAPI.svc/'
+)
+
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/

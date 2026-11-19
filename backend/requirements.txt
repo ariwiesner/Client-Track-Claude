@@ -9,6 +9,7 @@ Django==5.2.16
 django-cors-headers==4.9.0
 django-extensions==4.1
 djangorestframework==3.17.1
+et-xmlfile==2.0.0
 frozenlist==1.8.0
 google-api-core==2.32.0
 google-api-python-client==2.198.0
@@ -23,6 +24,7 @@ httplib2==0.32.0
 MarkupSafe==3.0.3
 multidict==6.7.1
 oauthlib==3.3.1
+openpyxl==3.1.5
 pillow==12.3.0
 proto-plus==1.28.1
 propcache==0.5.2

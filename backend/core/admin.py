@@ -8,7 +8,11 @@ from core.models import (
 
 @admin.register(Client)
 class ClientAdmin(admin.ModelAdmin):
-    list_display = ['name', 'job_type', 'phone', 'hourly_rate', 'is_active']
+    list_display = [
+        'name', 'job_type', 'phone', 'hourly_rate', 'is_active',
+        'rivhit_customer_id', 'rivhit_total_invoiced', 'rivhit_synced_at',
+    ]
+    list_editable = ['rivhit_customer_id']
     search_fields = ['name']
 
 
